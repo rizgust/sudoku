@@ -427,8 +427,10 @@ kbd {
   }
   .game { display: contents; }
   .board-col { grid-area: board; }
-  .topbar { grid-area: top; width: auto; }
-  .panel { grid-area: panel; width: auto; justify-content: flex-end; gap: 8px; }
+  .topbar { grid-area: top; width: auto; gap: 8px; }
+  .logo { font-size: 1.15rem; }
+  .topbar .btn { padding: 9px 12px; }
+  .panel { grid-area: panel; width: auto; justify-content: center; gap: 10px; }
   .tool .ic { width: 42px; height: 42px; }
   .numpad { grid-template-columns: repeat(5, 1fr); gap: 6px; }
   .num { height: clamp(44px, calc((100svh - 230px) / 2), 64px); }

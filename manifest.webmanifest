@@ -2,6 +2,7 @@
   "name": "Sudoku",
   "short_name": "Sudoku",
   "description": "A clean, ad-free Sudoku.",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

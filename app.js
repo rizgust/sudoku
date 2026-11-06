@@ -163,22 +163,6 @@
     render();
   }
 
-  function restart() {
-    Object.assign(game, {
-      values: game.puzzle.slice(),
-      notes: new Array(81).fill(0),
-      mistakes: 0,
-      hints: 0,
-      elapsed: 0,
-      history: [],
-      completed: false,
-    });
-    selected = null;
-    setPaused(false);
-    saveGame();
-    render();
-  }
-
   const canPlay = () => game && !game.completed && !paused;
 
   function snapshot() {
@@ -477,9 +461,10 @@
         newGame(b.dataset.diff);
       });
     });
+    // Restart = same as picking the current difficulty again: a fresh puzzle at that level.
     $('#btn-restart').addEventListener('click', () => {
       $('#dlg-new').close();
-      restart();
+      newGame(game.difficulty);
     });
     $('#btn-win-again').addEventListener('click', () => {
       $('#dlg-win').close();

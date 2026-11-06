@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="A clean, ad-free Sudoku.">
+  <meta name="theme-color" content="#f3f2ee" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111318" media="(prefers-color-scheme: dark)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Sudoku">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="format-detection" content="telephone=no">
+  <title>Sudoku</title>
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <h1 class="logo">Sudoku</h1>
+      <div class="topbar-actions">
+        <button class="btn primary" id="btn-new" type="button">New game</button>
+        <button class="icon-btn" id="btn-settings" type="button" aria-label="Settings and stats" title="Settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M19 6h1M4 12h3M13 12h7M4 18h11M21 18h-1"/><circle cx="16" cy="6" r="2.5"/><circle cx="10" cy="12" r="2.5"/><circle cx="18" cy="18" r="2.5"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="game">
+      <section class="board-col">
+        <div class="status">
+          <span id="difficulty-label">Easy</span>
+          <span id="mistakes-wrap">Mistakes <b id="mistakes">0</b></span>
+          <span class="timer">
+            <span id="timer">00:00</span>
+            <button class="mini-btn" id="btn-pause" type="button" aria-label="Pause" title="Pause (P)"></button>
+          </span>
+        </div>
+        <div class="board-box">
+          <div class="board" id="board" role="grid" aria-label="Sudoku board"></div>
+          <div class="pause-overlay" id="pause-overlay" hidden>
+            <button class="btn primary big" id="btn-resume" type="button">Resume</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="tools">
+          <button class="tool" id="btn-undo" type="button" title="Undo (Ctrl+Z)">
+            <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></span>
+            Undo
+          </button>
+          <button class="tool" id="btn-erase" type="button" title="Erase (Backspace)">
+            <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L12 20.6"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg></span>
+            Erase
+          </button>
+          <button class="tool" id="btn-notes" type="button" aria-pressed="false" title="Notes (N)">
+            <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></span>
+            <span class="badge" id="notes-badge">OFF</span>
+            Notes
+          </button>
+          <button class="tool" id="btn-hint" type="button" title="Hint">
+            <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg></span>
+            Hint
+          </button>
+        </div>
+        <div class="numpad" id="numpad"></div>
+        <p class="touch-help">Tip: long-press a number to add it as a note.</p>
+        <p class="kbd-help">Keyboard: <kbd>1</kbd>–<kbd>9</kbd> fill · <kbd>Shift</kbd>+digit note · <kbd>N</kbd> notes · arrows move · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>P</kbd> pause</p>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="dlg-new" aria-labelledby="dlg-new-title">
+    <div class="dlg-body">
+      <h2 id="dlg-new-title">New game</h2>
+      <p class="muted">Pick a difficulty.</p>
+      <div class="diff-list">
+        <button class="diff-btn" type="button" data-diff="easy">Easy <small data-best="easy"></small></button>
+        <button class="diff-btn" type="button" data-diff="medium">Medium <small data-best="medium"></small></button>
+        <button class="diff-btn" type="button" data-diff="hard">Hard <small data-best="hard"></small></button>
+        <button class="diff-btn" type="button" data-diff="expert">Expert <small data-best="expert"></small></button>
+      </div>
+      <div class="dlg-actions">
+        <button class="btn" id="btn-restart" type="button">Restart this puzzle</button>
+        <button class="btn" type="button" data-close>Cancel</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-settings" aria-labelledby="dlg-settings-title">
+    <div class="dlg-body">
+      <h2 id="dlg-settings-title">Settings</h2>
+      <label class="setting">
+        <span>Highlight mistakes<small>Show wrong numbers in red and count mistakes</small></span>
+        <input type="checkbox" data-setting="highlightMistakes">
+      </label>
+      <label class="setting">
+        <span>Highlight matching numbers<small>Shade every cell with the selected number</small></span>
+        <input type="checkbox" data-setting="highlightSame">
+      </label>
+      <label class="setting">
+        <span>Auto-remove notes<small>Clear notes in the row, column and box when you place a number</small></span>
+        <input type="checkbox" data-setting="autoRemoveNotes">
+      </label>
+      <label class="setting" id="setting-vibrate">
+        <span>Vibration<small>Buzz on mistakes and long-press</small></span>
+        <input type="checkbox" data-setting="vibrate">
+      </label>
+      <label class="setting">
+        <span>Theme</span>
+        <select data-setting="theme">
+          <option value="auto">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+
+      <h3>Stats</h3>
+      <table class="stats">
+        <thead><tr><th></th><th>Played</th><th>Won</th><th>Best</th></tr></thead>
+        <tbody id="stats-body"></tbody>
+      </table>
+
+      <div class="dlg-actions">
+        <button class="btn primary" type="button" data-close>Done</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-win" aria-labelledby="dlg-win-title">
+    <div class="dlg-body center">
+      <div class="win-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <h2 id="dlg-win-title">Solved!</h2>
+      <p class="muted" id="win-sub"></p>
+      <div class="win-stats">
+        <div><span>Time</span><b id="win-time"></b></div>
+        <div><span>Mistakes</span><b id="win-mistakes"></b></div>
+        <div><span>Hints</span><b id="win-hints"></b></div>
+      </div>
+      <div class="dlg-actions center">
+        <button class="btn" id="btn-win-choose" type="button">Change difficulty</button>
+        <button class="btn primary" id="btn-win-again" type="button" autofocus>Play again</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="sudoku.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

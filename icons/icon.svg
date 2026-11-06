@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#2a56c6"/>
+  <g transform="translate(116 116)">
+    <rect width="280" height="280" rx="30" fill="#fff"/>
+    <path d="M93.3 0v280M186.7 0v280M0 93.3h280M0 186.7h280" stroke="#2a56c6" stroke-opacity=".28" stroke-width="6"/>
+    <g font-family="Segoe UI, system-ui, -apple-system, Roboto, sans-serif" font-size="64" font-weight="700" text-anchor="middle" fill="#2a56c6">
+      <text x="46.7" y="69">1</text>
+      <text x="140" y="162.3">5</text>
+      <text x="233.3" y="255.7">9</text>
+    </g>
+  </g>
+</svg>

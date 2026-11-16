@@ -857,6 +857,28 @@ button.card:active { transform: scale(.985); }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
 .history td:first-child { white-space: nowrap; }
 
+/* Collapsible level picker on the home screen. */
+.level-picker { padding: 0; }
+.level-picker summary {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style: none;
+  border-radius: 14px;
+}
+.level-picker summary::-webkit-details-marker { display: none; }
+.level-picker summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.level-picker .lp-chev { transition: transform .18s ease; }
+.level-picker[open] .lp-chev { transform: rotate(90deg); }
+.level-picker[open] summary { border-bottom: 1px solid var(--line); border-radius: 14px 14px 0 0; }
+.level-picker .tier-list { padding: 12px; }
+.level-picker .tier-row { background: var(--bg); }
+.level-picker .tier-row.locked { background: transparent; }
+.level-picker .tier-row.locked.next { background: var(--bg); }
+.level-picker[open] .tier-list { animation: lp-in .18s ease-out; }
+@keyframes lp-in { from { opacity: 0; transform: translateY(-4px); } }
+@media (hover: hover) { .level-picker summary:hover { background: var(--bg); } }
+
 /* Live score: "+N" floats up when a correct digit is placed. */
 #score-wrap { position: relative; }
 .score-pop {

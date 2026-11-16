@@ -881,6 +881,12 @@
         </div>`;
     }).join('');
 
+    // Collapsible level picker: summary shows where you are and whether a qualification waits.
+    const qualReady = s.unlockProgress[s.unlocked + 1]?.qualReady;
+    $('#lp-sub').textContent = `${tierName(s.unlocked)} · ${s.unlocked} of ${TIERS.length} unlocked`;
+    $('#lp-badge').innerHTML = qualReady ? '<span class="chip ok">Qualification ready</span>' : '';
+    $('#level-picker').open = !!settings.levelsOpen;
+
     const earned = Object.keys(profile.achievements).length;
     $('#home-awards-sub').textContent = `${earned} / ${Progress.ACHIEVEMENTS.length} earned`;
   }
@@ -1199,6 +1205,11 @@
       if (mode) { openPicker(mode.dataset.mode); return; }
       const filter = e.target.closest('[data-filter]');
       if (filter) { statsFilter = filter.dataset.filter; renderStats(); }
+    });
+
+    $('#level-picker').addEventListener('toggle', () => {
+      settings.levelsOpen = $('#level-picker').open;
+      saveSettings();
     });
 
     $('#home-continue').addEventListener('click', () => { if (inProgress()) { go('game'); setPaused(false); } });

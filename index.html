@@ -55,7 +55,15 @@
     </div>
 
     <h2 class="section-title">Play</h2>
-    <div class="tier-list" id="tier-list"></div>
+    <details class="card level-picker" id="level-picker">
+      <summary>
+        <span class="ac-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4v-6H4zM10 20h4V9h-4zM16 20h4V4h-4z"/></svg></span>
+        <span class="ac-text"><b>Choose level</b><small id="lp-sub"></small></span>
+        <span id="lp-badge"></span>
+        <svg class="chev lp-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      </summary>
+      <div class="tier-list" id="tier-list"></div>
+    </details>
 
     <h2 class="section-title">More modes</h2>
     <div class="mode-grid">

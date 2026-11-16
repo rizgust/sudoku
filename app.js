@@ -434,13 +434,19 @@
     const hud = $('#chain-hud');
     const c = game && game.score && game.score.chain;
     const win = game ? Scoring.chainWindowMs(game.tier) : 0;
-    const left = c ? win - (clockMs() - c.startT) : 0;
+    let left = c ? win - (clockMs() - c.startT) : 0;
+    // The ring reaching 0 ends the chain right away rather than on the next 1 s tick.
+    if (c && left <= 0 && !paused) { expireChain(); left = 0; }
     const show = !!c && settings.chainHud && inProgress() && left > 0 && Scoring.chainsEnabled(game.mode);
     hud.hidden = !show;
     if (!show) { clearInterval(chainTimer); chainTimer = null; return; }
     const next = Scoring.nextChainGain(game.score);
     $('#chain-text').textContent = `${c.label} · ${c.length} placements · ${(left / 1000).toFixed(1)}s${next ? ` · next +${fmt(next)}` : ''}`;
-    $('#chain-bar').style.width = pct(left / win);
+    // Radial countdown: the ring empties as the window runs out; amber near the end, pulsing last.
+    const frac = Math.max(0, Math.min(1, left / win));
+    $('#chain-arc').style.strokeDashoffset = String(100 * (1 - frac));
+    hud.classList.toggle('low', frac <= 0.3);
+    hud.classList.toggle('critical', frac <= 0.15);
     if (!chainTimer) chainTimer = setInterval(() => { if (!paused) renderChain(); }, 100);
   }
 

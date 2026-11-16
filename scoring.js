@@ -18,11 +18,11 @@ const Scoring = (() => {
   // Every tunable number lives here (§29). Bump `version` whenever a value changes;
   // each finished attempt stores the version it was scored with.
   const RULES = {
-    version: 1,
+    version: 2, // 2: chain windows doubled
     // Indexed by tier id (1 Beginner … 6 Master).
     completion: [0, 1000, 2500, 5000, 10000, 20000, 40000],
     par: [0, 300, 480, 720, 1080, 1500, 2100],
-    chainWindowMs: [0, 30000, 25000, 20000, 15000, 12000, 10000],
+    chainWindowMs: [0, 60000, 50000, 40000, 30000, 24000, 20000],
     chainMin: 3,
     chainDifficulty10: [0, 10, 12, 15, 20, 25, 30], // ×1.0 … ×3.0, in tenths
 

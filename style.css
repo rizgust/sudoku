@@ -1228,8 +1228,8 @@ dialog::backdrop { background: rgba(18, 26, 28, .45); backdrop-filter: blur(3px)
 /* Chain indicator: one slim line in the gap under the board, so the board never moves. */
 .chain-hud {
   position: absolute;
-  left: 0; right: 0; top: calc(100% + 2px);
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  left: 0; right: 0; top: calc(100% + 1px);
+  display: flex; align-items: center; justify-content: center; gap: 5px;
   font-size: .64rem;
   line-height: 1;
   font-weight: 800;
@@ -1239,13 +1239,27 @@ dialog::backdrop { background: rgba(18, 26, 28, .45); backdrop-filter: blur(3px)
   pointer-events: none;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  transition: color .3s;
 }
 .chain-hud[hidden] { display: none; }
-.chain-hud i { display: block; width: 40%; height: 2px; border-radius: 2px; background: color-mix(in srgb, var(--accent) 20%, transparent); overflow: hidden; }
-.chain-hud b { display: block; height: 100%; background: var(--accent); }
+/* Radial countdown: full ring when the chain opens, empty (0) when it stops. */
+.chain-ring { width: 13px; height: 13px; flex: none; transform: rotate(-90deg); }
+.chain-ring circle { fill: none; stroke-width: 3; }
+.chain-ring .track { stroke: color-mix(in srgb, currentColor 20%, transparent); }
+.chain-ring .arc {
+  stroke: currentColor;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset .1s linear;
+}
+.chain-hud.low { color: #c9852b; }
+.chain-hud.critical .chain-ring { animation: chain-pulse .6s ease-in-out infinite alternate; }
+@keyframes chain-pulse { to { transform: rotate(-90deg) scale(1.2); } }
 
 @media (prefers-reduced-motion: reduce) {
   .feed-item { animation-name: feed-fade; }
   @keyframes feed-fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
   .score-pop.show { animation-duration: .01s; }
+  .chain-hud.critical .chain-ring { animation: none; }
+  .chain-ring .arc { transition: none; }
 }

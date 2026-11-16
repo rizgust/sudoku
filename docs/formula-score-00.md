@@ -570,12 +570,14 @@ Every difficulty has a specific chain window.
 
 | Difficulty | Window | Minimum Placements |
 |---|---:|---:|
-| Beginner | 30 seconds | 3 |
-| Easy | 25 seconds | 3 |
-| Medium | 20 seconds | 3 |
-| Hard | 15 seconds | 3 |
-| Expert | 12 seconds | 3 |
-| Master | 10 seconds | 3 |
+| Beginner | 60 seconds | 3 |
+| Easy | 50 seconds | 3 |
+| Medium | 40 seconds | 3 |
+| Hard | 30 seconds | 3 |
+| Expert | 24 seconds | 3 |
+| Master | 20 seconds | 3 |
+
+Scoring rules v2 doubled these windows (v1: 30 / 25 / 20 / 15 / 12 / 10 seconds).
 
 ## 10.1 Window Calculation
 

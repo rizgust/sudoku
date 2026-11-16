@@ -113,7 +113,8 @@ export function finish(res: AttemptRecord['res'], { silent = false, reason = nul
   const sc = won ? game.score.final : null;
   const st = game.score.stats;
   const replay = profile.history.some((a) => a.pid === game.pid && a.res === 'won');
-  const qualPassed = game.mode === 'qual' && won && game.mistakes <= 1 && game.hints === 0 && !game.assisted;
+  // Qualifications need a fully unassisted solve (guide lines never show there, but be strict).
+  const qualPassed = game.mode === 'qual' && won && game.mistakes <= 1 && game.hints === 0 && !game.assisted && !game.guided;
   const xp = sc ? Progress.xpFor({ total: sc.total, mode: game.mode, replay, qualPassed }) : 0;
   if (res === 'abandoned' && game.mode === 'qual') res = 'failed';
 
@@ -121,6 +122,7 @@ export function finish(res: AttemptRecord['res'], { silent = false, reason = nul
     pid: game.pid, tier: game.tier, mode: game.mode, start: game.start, end,
     t: game.elapsed, wall: Math.round((end - game.start) / 1000), res,
     m: game.mistakes, h: game.hints, as: game.assisted, gl: !!game.guided,
+    cat: game.assisted || game.guided ? 'guided' : 'pure',
     sc: sc ? sc.total : 0, xp, up: won && game.elapsed <= t.par, qp: qualPassed,
     tech: won ? game.techs : '',
   };

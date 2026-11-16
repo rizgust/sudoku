@@ -129,7 +129,7 @@ export function renderStats(): void {
         <thead><tr><th>Date</th><th>Puzzle</th><th>Result</th><th>Time</th><th>Score</th></tr></thead>
         <tbody>${H.slice(-40).reverse().map((a) => `<tr>
           <td>${new Date(a.end).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</td>
-          <td>${tierName(a.tier)}<small class="muted"> ${Progress.MODES[a.mode].name}</small></td>
+          <td>${tierName(a.tier)}<small class="muted"> ${Progress.MODES[a.mode].name}${a.mode === 'practice' ? '' : ` · ${Progress.CATEGORY_NAMES[Progress.assistCategory(a)]}`}</small></td>
           <td class="res-${a.res}">${a.res === 'won' ? (Progress.isClean(a) ? 'Clean' : 'Won') : a.res === 'failed' ? 'Failed' : 'Abandoned'}</td>
           <td>${a.mode === 'zen' ? '–' : formatTime(a.t)}</td>
           <td>${a.res !== 'won' || a.mode === 'practice' ? '–' : currentRules(a) ? fmt(a.sc) : `<span class="muted" title="Scored under the old rules">${fmt(a.sc)}*</span>`}</td>

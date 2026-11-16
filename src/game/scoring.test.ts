@@ -182,12 +182,72 @@ test('§7.2 / §15 penalties: 2 mistakes, 1 hint, assist → ×0.8 × 0.8 × 0.8
   assert.strictEqual(s.final?.total, Math.floor(1000 * 0.512));
 });
 
-test('guide lines are an assist: ×0.9 once, stacking with the others', () => {
+test('guide lines are an assist: ×0.5 once, stacking with the others', () => {
   const s = Scoring.create({ tier: 1, mode: 'classic' });
   for (const type of ['GUIDES_USED', 'GUIDES_USED', 'ASSIST_ENABLED'] as const) Scoring.apply(s, { type });
   Scoring.apply(s, { type: 'PUZZLE_COMPLETED', elapsed: 10000 });
-  assert.strictEqual(s.final?.G, 0.9);
-  assert.strictEqual(s.final?.total, Math.floor(1000 * 0.9 * 0.8));
+  assert.strictEqual(s.final?.G, 0.5);
+  assert.strictEqual(s.final?.total, Math.floor(1000 * 0.5 * 0.8));
+});
+
+/** A finished attempt with fixed non-speed points; `guided` uses guide lines. */
+function finished(tier: number, { elapsed, chainEarned = 0, guided = false, base = { pl: 2750, rg: 9900, mc: 1400 } }: { elapsed: number; chainEarned?: number; guided?: boolean; base?: { pl: number; rg: number; mc: number } }) {
+  const s = Scoring.create({ tier, mode: 'classic' });
+  Object.assign(s, { placementPts: base.pl, regionPts: base.rg, multiPts: base.mc, chainEarned });
+  if (guided) Scoring.apply(s, { type: 'GUIDES_USED' });
+  Scoring.apply(s, { type: 'PUZZLE_COMPLETED', elapsed });
+  return s.final!;
+}
+
+test('v4 Master with maximum chains: guided halves time and chain points before the cap and the final ×0.5', () => {
+  const fast = 60; // well under half of Master par: full time bonus
+  const pure = finished(6, { elapsed: fast, chainEarned: 1e6 });
+  // 2,750 + 9,900 + 1,400 + 40,000 + 20,000 = 74,050; cap 39,873; total 113,923
+  assert.deepEqual([pure.time, pure.chain, pure.total], [20000, 39873, 113923]);
+
+  const guided = finished(6, { elapsed: fast, chainEarned: 1e6, guided: true });
+  // Time 10,000 → non-chain 64,050; chains 500,000 capped at 34,488; raw 98,538 × 0.5
+  assert.deepEqual([guided.timeEarned, guided.time, guided.chain, guided.raw, guided.total], [20000, 10000, 34488, 98538, 49269]);
+  assert.equal(guided.guidedSpeed, true);
+
+  // A slow Pure game with no speed rewards at all still beats the fastest Guided game.
+  const slowPure = finished(6, { elapsed: 1e6 });
+  assert.equal(slowPure.total, 54050);
+  assert.ok(slowPure.total > guided.total);
+});
+
+test('on every tier, the fastest Guided game scores below the slowest Pure one', () => {
+  for (let tier = 1; tier <= 6; tier++) {
+    const guided = finished(tier, { elapsed: 1, chainEarned: 1e7, guided: true });
+    const slowPure = finished(tier, { elapsed: 1e7 });
+    assert.ok(guided.total < slowPure.total, `tier ${tier}: ${guided.total} vs ${slowPure.total}`);
+  }
+});
+
+test('the 35% cap applies after the Guided chain reduction', () => {
+  // Beginner, no time bonus: non-chain 14,550 → cap 7,834. 10,000 earned → 5,000 after halving, under the cap.
+  const g = finished(1, { elapsed: 1e6, chainEarned: 10000, guided: true, base: { pl: 2250, rg: 9900, mc: 1400 } });
+  assert.deepEqual([g.chainEarned, g.chain, g.raw, g.total], [10000, 5000, 19550, 9775]);
+  // 20,000 earned → 10,000 after halving, now over the cap.
+  const h = finished(1, { elapsed: 1e6, chainEarned: 20000, guided: true, base: { pl: 2250, rg: 9900, mc: 1400 } });
+  assert.equal(h.chain, Math.floor((14550 * 35) / 65));
+});
+
+test('guide lines used briefly mid-game still halve chains earned before and after', () => {
+  const s = Scoring.create({ tier: 4, mode: 'classic' });
+  const cs = Chains.create();
+  play(s, cs, [place(1, 0, 1, 0), place(2, 1, 2, 4000), place(3, 2, 3, 9000), place(4, 9, 4, 13000)], 30000);
+  const before = s.chainEarned;
+  assert.equal(Scoring.live(s), 200 + before);
+  Scoring.apply(s, { type: 'GUIDES_USED' }); // switched on once, then off: nothing ever un-guides
+  // Detection keeps working and chain points keep being recorded as earned.
+  close(s, cs);
+  play(s, cs, [place(5, 40, 5, 60000), place(6, 41, 6, 61000), place(7, 42, 7, 62000)], 30000);
+  assert.ok(s.chainEarned > before);
+  assert.equal(Scoring.live(s), Math.floor((350 + Math.floor(s.chainEarned / 2)) / 2));
+  Scoring.apply(s, { type: 'PUZZLE_COMPLETED', elapsed: 1e6 });
+  assert.equal(s.final!.chain, Math.floor(s.chainEarned / 2));
+  assert.equal(s.final!.G, 0.5);
 });
 
 test('§24.4 replay of the event log reproduces the score', () => {

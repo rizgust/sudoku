@@ -922,13 +922,29 @@ Guide lines shade every row and column that already holds the selected digit, wh
 
 ```text
 GuideMultiplier =
-    0.9 if guide lines were shown during the attempt
+    0.5 if guide lines were shown during the attempt
     1.0 otherwise
 ```
 
-The penalty applies the first time the shading appears and stays for the whole attempt; turning the setting off afterwards does not remove it. Qualifications never show guide lines.
+Guide lines also halve the speed rewards, so a fast Guided game cannot outscore Pure play on speed alone:
 
-Introduced in scoring rules v3.
+```text
+GuidedSpeed = 0.5 if guide lines were shown during the attempt, 1.0 otherwise
+
+TimeBonus'   = floor(TimeBonus × GuidedSpeed)
+ChainBonus'  = floor(EarnedChainBonus × GuidedSpeed)
+EffectiveChainBonus = min(ChainBonus', MaximumChainBonus)   -- the 35% cap, computed with TimeBonus'
+```
+
+Placement, region, multi-clear and completion bonuses are unchanged before the final GuideMultiplier. Chain detection, chain length, the chain indicator and all effects work as usual; only the points are reduced.
+
+Both penalties apply the first time the shading appears and stay for the whole attempt, including chains earned before it; turning the setting off afterwards does not remove them. Qualifications never show guide lines.
+
+Introduced in scoring rules v3 (×0.5); the speed reduction in v4.
+
+## 15.3b Pure and Guided Attempts
+
+An attempt is **Guided** if guide lines or Auto notes were used at any point, otherwise **Pure**; once Guided, it stays Guided. This is a label shown on the result screen and in the history. Placement, region, time and chain rewards apply in both, and personal bests are shared: the assist multipliers keep them comparable. Completed attempts keep the status recorded at the time; older attempts whose assist use cannot be verified are labelled **Legacy**, never assumed Pure. Qualifications require no assists.
 
 ## 15.4 Mode Multipliers
 

@@ -86,13 +86,13 @@ function bindNumButton(b: HTMLButtonElement, d: number): void {
   });
 }
 
-/** Guide lines count as an assist: the first time they show, the attempt scores ×0.9. */
+/** Guide lines count as an assist: the first time they show, the attempt scores ×0.5. */
 function markGuided(game: Game): void {
   if (game.guided) return;
   game.guided = true;
   record(game, { type: 'GUIDES_USED' });
   saveGame();
-  if (game.mode !== 'practice') toast('Guide lines on: score ×0.9 for this puzzle');
+  if (game.mode !== 'practice') toast('Guide lines on: score ×0.5, time bonus and chains halved for this puzzle');
 }
 
 export function setPaused(p: boolean): void {
@@ -189,6 +189,7 @@ export function render(): void {
   if (game.mode === 'qual') sub += ` · No hints · ${Math.max(0, 1 - game.mistakes)} mistake left`;
   if (game.mode === 'time') sub += ` · Par ${formatTime(t.par)}`;
   if (game.mode === 'daily') sub += ` · ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+  if ((game.guided || game.assisted) && game.mode !== 'practice') sub += ' · Guided';
   $('#game-sub').textContent = sub;
 
   $('#numpad').classList.toggle('notes-mode', ui.notesMode);

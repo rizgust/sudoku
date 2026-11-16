@@ -9,7 +9,9 @@ import type { Award, ChainPattern, ChainType, GameEvent, ModeId, PlacementTechni
 // Every tunable number lives here (§29). Bump `version` whenever a value changes;
 // each finished attempt stores the version it was scored with.
 export const RULES = {
-  version: 3, // 2: chain windows doubled; 3: guide lines count as an assist
+  // 2: chain windows doubled; 3: guide lines count as an assist (×0.5);
+  // 4: guide lines also halve the speed rewards (time bonus, chains).
+  version: 4,
   // Indexed by tier id (1 Beginner … 6 Master).
   completion: [0, 1000, 2500, 5000, 10000, 20000, 40000],
   par: [0, 300, 480, 720, 1080, 1500, 2100],
@@ -41,7 +43,10 @@ export const RULES = {
   mistakeStep10: 1, // −10% per mistake
   hintStep10: 2,    // −20% per hint
   assist10: 8,      // ×0.8 once auto-fill candidates were used
-  guides10: 9,      // ×0.9 once guide lines were shown
+  guides10: 5,      // ×0.5 on the final score once guide lines were shown
+  // Guided attempts also earn half of the speed rewards, before the 35% chain cap and the
+  // final ×0.5, so Pure play stays ahead even against a much faster Guided game.
+  guidedSpeedPct: 50,
   modes: {
     classic:  { mul10: 10, chains: true },
     qual:     { mul10: 10, chains: true },
@@ -78,7 +83,13 @@ export interface AttemptStats {
 export interface FinalScore {
   v: number;
   placement: number; region: number; multi: number;
-  chainEarned: number; chain: number; completion: number; time: number; raw: number;
+  /** Chain points as earned; `chain` is what counted (after the Guided reduction and the cap). */
+  chainEarned: number; chain: number; completion: number;
+  /** Time bonus as earned; `time` is what counted (after the Guided reduction). */
+  timeEarned: number; time: number;
+  /** Guide lines were used: time bonus and chains were multiplied by guidedSpeedPct. */
+  guidedSpeed: boolean;
+  raw: number;
   A: number; H: number; S: number; G: number; M: number;
   total: number;
 }
@@ -293,18 +304,23 @@ export function timeBonus(tier: number, elapsed: number): number {
   return Math.floor((C * num) / (6 * P));
 }
 
+/** Share of the speed rewards (time bonus, chains) an attempt keeps: all, or half once guided. */
+const speedShare = (s: ScoreState, pts: number) => (s.guided ? Math.floor((pts * RULES.guidedSpeedPct) / 100) : pts);
+
 export function finalize(s: ScoreState, elapsed: number): FinalScore {
   const completion = RULES.completion[s.tier];
-  const time = timeBonus(s.tier, elapsed);
+  const timeEarned = timeBonus(s.tier, elapsed);
+  const time = speedShare(s, timeEarned);
   const nonChain = s.placementPts + s.regionPts + s.multiPts + completion + time;
+  // The 35% cap applies after the Guided reduction.
   const chainCap = Math.floor((nonChain * RULES.chainCapPct) / (100 - RULES.chainCapPct));
-  const chain = Math.min(s.chainEarned, chainCap);
+  const chain = Math.min(speedShare(s, s.chainEarned), chainCap);
   const raw = nonChain + chain;
   const p = penalties(s);
   return {
     v: RULES.version,
     placement: s.placementPts, region: s.regionPts, multi: s.multiPts,
-    chainEarned: s.chainEarned, chain, completion, time, raw,
+    chainEarned: s.chainEarned, chain, completion, timeEarned, time, guidedSpeed: s.guided, raw,
     A: p.a10 / 10, H: p.h10 / 10, S: p.s10 / 10, G: p.g10 / 10, M: p.m10 / 10,
     total: p.apply(raw),
   };
@@ -313,7 +329,7 @@ export function finalize(s: ScoreState, elapsed: number): FinalScore {
 /** Provisional score during play: no completion or time bonus, chain bonus not yet capped (§16.1). */
 export function live(s: ScoreState): number {
   if (s.final) return s.final.total;
-  return penalties(s).apply(s.placementPts + s.regionPts + s.multiPts + s.chainEarned);
+  return penalties(s).apply(s.placementPts + s.regionPts + s.multiPts + speedShare(s, s.chainEarned));
 }
 
 /**

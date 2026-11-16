@@ -50,7 +50,7 @@ export interface Game {
   mistakes: number;
   hints: number;
   assisted: boolean;
-  /** Guide lines were shown this attempt (score ×0.9). */
+  /** Guide lines were shown this attempt (score ×0.5). */
   guided?: boolean;
   /** Game time in seconds, paused time excluded. */
   elapsed: number;

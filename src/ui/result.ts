@@ -33,6 +33,7 @@ export function showResult({ rec, sc, before, newAch, qualPassed, replay, reason
   $('#result-mark').classList.toggle('fail', !ok);
   $('#result-mark').classList.remove('gold');
 
+  const cat = Progress.assistCategory(rec);
   const prevBest = before.perTier[rec.tier].bestTime;
   const isBest = won && rec.mode !== 'zen' && rec.mode !== 'practice' && (prevBest == null || rec.t < prevBest);
   // High scores compare only within the same scoring rules. The first score under new rules
@@ -47,19 +48,30 @@ export function showResult({ rec, sc, before, newAch, qualPassed, replay, reason
   if (!won && reason === 'time') tags.push(`Par ${formatTime(t.par)}`);
   $('#result-sub').textContent = tags.join(' · ');
 
+  // Pure or Guided, and which assists made it Guided.
+  const badge = $('#result-cat');
+  badge.hidden = rec.mode === 'practice';
+  badge.className = `cat-badge ${cat}`;
+  const used = [rec.gl && 'guide lines', rec.as && 'Auto notes'].filter(Boolean).join(' and ');
+  badge.textContent = cat === 'pure' ? 'Pure · no assists' : `Guided · ${used || 'assists'} used`;
+
   const showScore = !!sc && rec.mode !== 'practice';
   $('#result-score').hidden = !showScore;
   $('#result-breakdown').hidden = !showScore;
   if (sc && showScore) {
     $('#result-score').innerHTML = `<span id="result-total">${fmt(sc.total)}</span><small> pts</small>`;
-    const chainNote = sc.chain < sc.chainEarned ? ` <small class="muted">(${fmt(sc.chainEarned)} earned, capped at 35%)</small>` : '';
+    // Explain any reduction: Guided halves the speed rewards, and chains are capped at 35%.
+    const halved = sc.guidedSpeed ? ', ×0.5 guided' : '';
+    const capped = sc.chain < (sc.guidedSpeed ? Math.floor(sc.chainEarned / 2) : sc.chainEarned) ? ', capped at 35%' : '';
+    const chainNote = sc.chain < sc.chainEarned ? ` <small class="muted">(${fmt(sc.chainEarned)} earned${halved}${capped})</small>` : '';
+    const timeNote = sc.time < sc.timeEarned ? ` <small class="muted">(${fmt(sc.timeEarned)} earned${halved})</small>` : '';
     const rows: [string, string][] = [
       ['Placements', fmt(sc.placement)],
       ['Regions', `+${fmt(sc.region)}`],
       ['Multi-clears', `+${fmt(sc.multi)}`],
       ['Chains', `+${fmt(sc.chain)}${chainNote}`],
       ['Completion', `+${fmt(sc.completion)}`],
-      ['Time bonus', `+${fmt(sc.time)}`],
+      ['Time bonus', `+${fmt(sc.time)}${timeNote}`],
       ['Accuracy', `×${sc.A.toFixed(2)}`],
       ['Hints', `×${sc.H.toFixed(2)}`],
       ['Assists', `×${sc.S.toFixed(2)}`],

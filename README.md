@@ -19,7 +19,7 @@ A clean, ad-free Sudoku where every difficulty is earned. TypeScript and plain D
 ### Playing
 - Notes, with long-press on a number to switch between digit and note. Notes for a digit already in the same row, column or box are refused.
 - Auto-remove notes when a digit is placed, undo, erase, pause (the board is hidden while paused).
-- Matching digits are highlighted when a digit is selected. Optional **Guide lines** also shade every row and column that already holds it, so the open spots stand out; they count as an assist (a puzzle where they show scores ×0.9) and are off in qualifications.
+- Matching digits are highlighted when a digit is selected. Optional **Guide lines** also shade every row and column that already holds it, so the open spots stand out; they count as an assist (a puzzle where they show halves its time bonus and chain points, then scores ×0.5) and are off in qualifications.
 - **Hints that explain**: a hint first points out a wrong digit, otherwise names the next logical technique, highlights the cells and explains the deduction. Apply places the digit or crosses out candidates. "Learn" opens the technique's explanation.
 - Optional **Auto notes** assist (scores ×0.8, not allowed in qualifications).
 - Keyboard: `1`–`9` fill · `Shift`+digit toggles a note · `N` notes mode · `H` hint · arrows move · `Backspace` erase · `Ctrl`+`Z` undo · `P` pause · `Esc` clear selection.
@@ -30,8 +30,9 @@ A clean, ad-free Sudoku where every difficulty is earned. TypeScript and plain D
 - **Region clears**: +300 for a row or column, +500 for a block. Completing two at once adds +200 (Double Clear), three at once +400 (Triple Clear).
 - **Chains**: three or more correct placements inside a time window (60 s on Beginner down to 20 s on Master) form a chain. Chains are Time, Number (same digit), Line (same row or column), Block (same box) or Hybrid (Time + Block + Line). Longer chains, stronger types and harder tiers pay more; a chain pays only its growth, closes when its window ends, and the next one starts fresh. Mistakes, hints, clearing a correct digit and undo end a chain.
 - **Completion bonus** (1,000 on Beginner to 40,000 on Master) and a **time bonus** of up to half of it (full at half par, none at twice par).
-- **Penalties**: −10% per mistake, −20% per hint, ×0.8 with Auto notes, ×0.9 with Guide lines; Zen ×0.5, Practice ×0. Chain points are capped at 35% of the score.
+- **Penalties**: −10% per mistake, −20% per hint, ×0.8 with Auto notes, ×0.5 with Guide lines (which also halve the time bonus and chain points); Zen ×0.5, Practice ×0. Chain points are capped at 35% of the score.
 - **Anti-farming**: a cell or region pays once per attempt, so undo, erase and re-entry earn nothing new.
+- **Pure or Guided**: every attempt is labelled Pure (no guide lines or Auto notes at any point) or Guided; older attempts whose assist use can't be verified are labelled Legacy. The label shows on the result screen and in the history. Personal bests are shared; the Guided multipliers keep them fair.
 - The live score updates as you play; the result screen breaks the final score down line by line.
 - Scoring rules are versioned. Scores from older rules are kept but marked, and never compared with current ones.
 

@@ -22,6 +22,8 @@ export interface AttemptRecord {
   as: boolean;
   /** Guide lines were shown. */
   gl?: boolean;
+  /** Pure (no score-affecting assist all attempt) or Guided. Recorded from rules v3 on. */
+  cat?: 'pure' | 'guided';
   /** Final score and XP earned. */
   sc: number;
   xp: number;
@@ -147,10 +149,31 @@ export function dailyInfo(key: string) {
   return { key, tierId: DAILY_TIERS[d.getDay()], seed: hashString(`daily:${key}`), pid: `daily-${key}` };
 }
 
+/**
+ * How an attempt was played, shown as a label (personal bests are shared):
+ * - pure: no guide lines and no Auto notes during the whole attempt;
+ * - guided: guide lines or Auto notes were used at some point;
+ * - legacy: finished before assists were fully tracked, so the status can't be verified.
+ */
+export type AssistCategory = 'pure' | 'guided' | 'legacy';
+export const CATEGORY_NAMES: Record<AssistCategory, string> = { pure: 'Pure', guided: 'Guided', legacy: 'Legacy' };
+
+export function assistCategory(a: AttemptRecord): AssistCategory {
+  if (a.cat) return a.cat;
+  if (a.as || a.gl) return 'guided'; // an assist is on record
+  // Guide-line shading existed before it was tracked, so an older attempt can't be called Pure.
+  return a.gl === false ? 'pure' : 'legacy';
+}
+
 export interface TierStats {
   played: number; completed: number; abandoned: number; failed: number; clean: number; quals: number; qualAttempts: number;
   progCompleted: number; progClean: number; progUnderPar: number;
-  bestTime: number | null; bestScore: number; legacyBestScore: number; totalTime: number; mistakes: number; hints: number;
+  bestTime: number | null;
+  /** Best score under the current scoring rules. */
+  bestScore: number;
+  /** Best score under older scoring rules (shown marked, never compared). */
+  legacyBestScore: number;
+  totalTime: number; mistakes: number; hints: number;
   times: { t: number; end: number; mode: ModeId }[];
   timeAttackBest: number | null; cleanStreak: number; bestCleanStreak: number;
 }

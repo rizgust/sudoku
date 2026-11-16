@@ -1347,3 +1347,20 @@ dialog::backdrop { background: rgba(18, 26, 28, .45); backdrop-filter: blur(3px)
 @keyframes fx-glow-text { 30% { text-shadow: 0 0 10px var(--fx-emerald); color: var(--fx-emerald); } }
 .news.fx-rank .medal { animation: fx-medal .8s .4s cubic-bezier(.34, 1.56, .64, 1) both; }
 @keyframes fx-medal { from { transform: scale(.3) rotate(-120deg); opacity: 0; } }
+
+/* Pure / Guided / Legacy attempt labels. */
+.cat-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .03em;
+  background: color-mix(in srgb, var(--cat-c, var(--muted)) 16%, transparent);
+  color: var(--cat-c, var(--muted));
+}
+.cat-badge[hidden] { display: none; }
+.cat-badge.pure { --cat-c: var(--fx-emerald); }
+.cat-badge.guided { --cat-c: var(--fx-amber); }
+.cat-badge.legacy { --cat-c: var(--muted); }
+#result-cat { margin: 2px auto 4px; }

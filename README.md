@@ -1,16 +1,27 @@
 # Sudoku
 
-A clean, ad-free Sudoku. Plain HTML/CSS/JS: no build step, no dependencies, works offline once installed.
+A clean, ad-free Sudoku where every difficulty is earned. Plain HTML/CSS/JS: no build step, no dependencies, works offline once installed. Design reference: [docs/design-00.md](docs/design-00.md).
 
 **Play locally:** open `index.html` in a browser.
 
-- 4 difficulties (Easy/Medium are solvable with simple logic; Hard/Expert need more advanced techniques). Every puzzle has exactly one solution.
-- Notes (long-press a number on touch screens), undo, erase, hints, mistake highlighting, timer with pause
-- Progress, settings and best times are saved in your browser
-- Light/dark theme, phone (portrait and landscape) and desktop layouts
-- Installable to the home screen, works offline
+- **Six tiers graded by technique**, not clue count: Beginner, Easy, Medium, Hard, Expert, Master. A human-style logical solver (singles → pairs/triples → wings, fish, unique rectangles → chains) grades every puzzle, and each puzzle has exactly one solution.
+- **Earned unlocks:** only Beginner is open at first. Higher tiers need completions, clean solves and passed qualifications (no hints, at most one mistake).
+- **Score, XP and mastery:** score = (base + time bonus) × accuracy × hints × assists. XP raises your level. Bronze → Diamond mastery ranks per tier. Replaying a puzzle earns no progression credit.
+- **Modes:** Classic, Qualification, Daily Challenge (the same puzzle for everyone), Time Attack, Zen and Practice (starts the board right where a chosen technique is needed).
+- **Hints that explain:** each hint names the technique, highlights the cells and explains the deduction. Apply places the digit or crosses out candidates.
+- **Statistics:** per-tier records, solve-time trend with an improvement note, techniques met, full attempt history. About 47 achievements, some hidden.
+- Notes (long-press a number on touch screens), undo, optional Auto notes assist, light/dark theme, phone and desktop layouts, autosave.
 
-Keyboard: `1`–`9` fill · `Shift`+digit toggles a note · `N` notes mode · arrows move · `Backspace` erase · `Ctrl+Z` undo · `P` pause
+Keyboard: `1`–`9` fill · `Shift`+digit toggles a note · `N` notes mode · `H` hint · arrows move · `Backspace` erase · `Ctrl`+`Z` undo · `P` pause
+
+### Files
+
+- `sudoku.js`: engine (brute-force solver, logical solver and techniques, generator, symmetry transforms)
+- `progress.js`: tiers, scoring, XP, mastery, unlock rules, achievements; all stats are derived from the attempt history
+- `puzzles.js`: generated fallback bank and technique-practice puzzles. Rebuild with `bun tools/build-bank.js`
+- `app.js`, `index.html`, `style.css`: UI
+
+Puzzles are generated live in the browser (usually well under a second). If that takes too long, a bank puzzle is used with a random symmetry transform, which keeps its grade and unique solution.
 
 ## Deploy to Vercel
 

@@ -1,8 +1,6 @@
 # Sudoku
 
-A clean, ad-free Sudoku where every difficulty is earned. Plain HTML/CSS/JS: no build step, no dependencies, works offline once installed. Design reference: [docs/design-00.md](docs/design-00.md).
-
-**Play locally:** open `index.html` in a browser.
+A clean, ad-free Sudoku where every difficulty is earned. TypeScript and plain DOM (no UI framework), built with Vite, installable and offline-capable. Design reference: [docs/design-00.md](docs/design-00.md).
 
 - **Six tiers graded by technique**, not clue count: Beginner, Easy, Medium, Hard, Expert, Master. A human-style logical solver (singles → pairs/triples → wings, fish, unique rectangles → chains) grades every puzzle, and each puzzle has exactly one solution.
 - **Earned unlocks:** only Beginner is open at first. Higher tiers need completions, clean solves and passed qualifications (no hints, at most one mistake).
@@ -14,30 +12,44 @@ A clean, ad-free Sudoku where every difficulty is earned. Plain HTML/CSS/JS: no 
 
 Keyboard: `1`–`9` fill · `Shift`+digit toggles a note · `N` notes mode · `H` hint · arrows move · `Backspace` erase · `Ctrl`+`Z` undo · `P` pause
 
-### Files
+## Develop
 
-- `sudoku.js`: engine (brute-force solver, logical solver and techniques, generator, symmetry transforms)
-- `scoring.js`: scoring engine and all balancing values (`RULES`, versioned). Consumes gameplay events, never touches the board
-- `chains.js`: chain detector. Reports which chain patterns each eligible placement completes; knows nothing about points
-- `progress.js`: tiers, XP, mastery, unlock rules, achievements; all stats are derived from the attempt history
-- `tools/test-scoring.js`: checks the engine against the spec's examples. Run `bun tools/test-scoring.js`
-- `puzzles.js`: generated fallback bank and technique-practice puzzles. Rebuild with `bun tools/build-bank.js`
-- `app.js`, `index.html`, `style.css`: UI
+Needs [Bun](https://bun.sh).
+
+```sh
+bun install
+bun run dev        # local dev server with hot reload
+bun run test       # scoring and chain tests (Vitest)
+bun run typecheck  # strict TypeScript, app and tools
+bun run build      # typecheck, then production build into dist/
+bun run preview    # serve dist/ locally, service worker included
+bun run bank       # regenerate the puzzle bank (src/core/puzzles.ts)
+```
+
+### Layout
+
+- `src/core/`: the Sudoku engine (`sudoku.ts`: solvers, techniques, generator, transforms) and the generated puzzle bank (`puzzles.ts`). No DOM.
+- `src/game/`: game rules, no DOM.
+  - `events.ts`: the gameplay event types every other part agrees on.
+  - `scoring.ts`: scoring engine and all balancing values (`RULES`, versioned). Consumes events, never touches the board.
+  - `chains.ts`: chain detector. Reports which chain patterns each eligible placement completes; knows nothing about points.
+  - `progress.ts`: tiers, XP, mastery, unlocks, achievements. All stats are derived from the attempt history.
+- `src/ui/`: the interface.
+  - `state.ts`: settings, profile, the game in progress and storage.
+  - `gameplay-events.ts`: the event bus. Moves become events here; scoring and listeners (`onGameEvent`) react.
+  - `board.ts`, `actions.ts`, `hints.ts`, `lifecycle.ts`, `hud.ts`, `result.ts`, `router.ts`, `bindings.ts`, `screens/`.
+- `src/main.ts`: entry point. `index.html`, `src/style.css`, `public/icons/`.
+- `vite.config.ts`: build and PWA settings (manifest, offline caching).
 
 Puzzles are generated live in the browser (usually well under a second). If that takes too long, a bank puzzle is used with a random symmetry transform, which keeps its grade and unique solution.
 
 ## Deploy to Vercel
 
-It's a static site, so Vercel needs no build settings.
+`vercel.json` holds the settings, so nothing needs to be set in the dashboard: Vite preset, `bun install`, `bun run build`, output in `dist/`. It also stops browsers caching the service worker (so phones pick up new versions) and caches the fingerprinted files in `assets/` for a year.
 
-**From GitHub (recommended, auto-deploys on every push):**
-1. Push this repo to GitHub.
-2. In Vercel: **Add New → Project**, then import the repo.
-3. Framework Preset: **Other**. Leave Build Command and Output Directory empty. Click **Deploy**.
+**From GitHub (recommended, auto-deploys on every push):** import the repo in Vercel (**Add New → Project**) and click **Deploy**. For a project created before the move to Vite, the settings in `vercel.json` override the old "Other" preset; if the dashboard has its own Build Command or Output Directory overrides, clear them.
 
-**From the command line:** run `bunx vercel` (or `npx vercel`) in this folder, then `bunx vercel --prod`.
-
-`vercel.json` makes sure the service worker (`sw.js`) is never cached by the browser, so phones pick up new versions.
+**From the command line:** `bunx vercel` for a preview, `bunx vercel --prod` for production.
 
 ## Install on your phone
 
@@ -50,5 +62,6 @@ It opens full-screen like an app and works offline after the first visit.
 
 Notes:
 - On iPhone, the home-screen app keeps its own save data, separate from Safari. A game started in Safari won't appear in the installed app.
-- After a new deploy, the app updates the next time you open it while online.
+- After a new deploy, the app downloads the update in the background and uses it the next time it opens.
+- Saved games, history and settings stay in the browser's storage, so they carry over between versions.
 - Vibration feedback only works on Android; iPhone browsers don't support it.

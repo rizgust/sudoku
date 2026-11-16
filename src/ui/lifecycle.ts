@@ -7,7 +7,7 @@ import { boardEl, render, setPaused } from './board.ts';
 import { $, buzz, nextFrame, toast } from './dom.ts';
 import { breakChain, initScoring, markTick, record } from './gameplay-events.ts';
 import { hideHint } from './hints.ts';
-import { clearFeed } from './hud.ts';
+import { clearFx } from '../effects/index.ts';
 import { makePuzzle, practicePuzzle, prefetch, takePuzzle, type PuzzleData } from './puzzle-source.ts';
 import { showResult } from './result.ts';
 import { route } from './router.ts';
@@ -85,7 +85,7 @@ export async function startGame({ mode, tier, tech = null }: StartOptions): Prom
   } as unknown as Game;
   initScoring(game);
   ui.game = game;
-  clearFeed();
+  clearFx();
   markTick();
   setPaused(false);
   saveGame();

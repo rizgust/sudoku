@@ -1,6 +1,6 @@
 /* Player actions on the board: select, place, note, erase, undo and auto notes. */
 import { COL, PEERS, ROW } from '../core/sudoku.ts';
-import { cells, flashCompletedUnits, render } from './board.ts';
+import { cells, render } from './board.ts';
 import { buzz, retrigger, toast } from './dom.ts';
 import { breakChain, onCorrect, record } from './gameplay-events.ts';
 import { hideHint } from './hints.ts';
@@ -71,8 +71,7 @@ export function input(d: number, asNote = ui.notesMode): void {
   if (d !== game.solution[i]) {
     game.mistakes++;
     breakChain(game, 'mistake');
-    record(game, { type: 'MISTAKE' });
-    retrigger(cells[i].el, 'shake');
+    record(game, { type: 'MISTAKE', cell: i });
     buzz([35, 50, 35]);
     if (game.mode === 'qual' && game.mistakes > 1) {
       commit();
@@ -80,9 +79,8 @@ export function input(d: number, asNote = ui.notesMode): void {
       return;
     }
   } else {
-    onCorrect(game, i, d);
     retrigger(cells[i].el, 'pop');
-    flashCompletedUnits(i);
+    onCorrect(game, i, d);
   }
   checkWin();
   commit();

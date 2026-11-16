@@ -2,7 +2,9 @@
 import * as Progress from '../game/progress.ts';
 import type { Achievement, AttemptRecord, Summary } from '../game/progress.ts';
 import type { FinalScore } from '../game/scoring.ts';
+import type { ProgressEvent } from '../game/events.ts';
 import { $, esc, fmt, formatTime, ICON_CHECK, ICON_LOCK, ICON_X, pct } from './dom.ts';
+import { emitProgress } from './gameplay-events.ts';
 import { tierName, ui } from './state.ts';
 
 export interface ResultInfo {
@@ -29,6 +31,7 @@ export function showResult({ rec, sc, before, newAch, qualPassed, replay, reason
   const ok = won && (rec.mode !== 'qual' || qualPassed);
   $('#result-mark').innerHTML = ok ? ICON_CHECK : ICON_X;
   $('#result-mark').classList.toggle('fail', !ok);
+  $('#result-mark').classList.remove('gold');
 
   const prevBest = before.perTier[rec.tier].bestTime;
   const isBest = won && rec.mode !== 'zen' && rec.mode !== 'practice' && (prevBest == null || rec.t < prevBest);
@@ -48,7 +51,7 @@ export function showResult({ rec, sc, before, newAch, qualPassed, replay, reason
   $('#result-score').hidden = !showScore;
   $('#result-breakdown').hidden = !showScore;
   if (sc && showScore) {
-    $('#result-score').innerHTML = `${fmt(sc.total)}<small> pts</small>`;
+    $('#result-score').innerHTML = `<span id="result-total">${fmt(sc.total)}</span><small> pts</small>`;
     const chainNote = sc.chain < sc.chainEarned ? ` <small class="muted">(${fmt(sc.chainEarned)} earned, capped at 35%)</small>` : '';
     const rows: [string, string][] = [
       ['Placements', fmt(sc.placement)],
@@ -95,5 +98,19 @@ export function showResult({ rec, sc, before, newAch, qualPassed, replay, reason
     next.textContent = up && up.qualReady ? 'Next qualification' : 'Play classic';
   } else if (rec.mode === 'practice') next.textContent = 'Practice again';
   else next.textContent = 'Next puzzle';
-  $<HTMLDialogElement>('#dlg-result').showModal();
+  $('#result-fx').textContent = '';
+  const dlg = $<HTMLDialogElement>('#dlg-result');
+  dlg.showModal();
+  // Autofocus on "Next" would scroll a tall dialog to the bottom; start at the score instead.
+  dlg.scrollTop = 0;
+  dlg.querySelector('.dlg-body')?.scrollTo(0, 0);
+
+  // What this attempt achieved, for the celebration layer (§H). Results are already saved.
+  const events: ProgressEvent[] = [{ type: 'PUZZLE_RESULT', total: sc ? sc.total : 0, won: showScore }];
+  if (won && rec.m === 0 && rec.h === 0 && rec.mode !== 'practice') events.push({ type: 'CLEAN_COMPLETION' });
+  if (isHigh) events.push({ type: 'PERSONAL_BEST', previous: prevHigh, score: rec.sc });
+  if (after.unlocked > before.unlocked) events.push({ type: 'DIFFICULTY_UNLOCKED', tier: after.unlocked, name: tierName(after.unlocked) });
+  if (ma.rank > mb.rank) events.push({ type: 'MASTERY_RANK_UP', tier: rec.tier, rank: `${t.name} ${ma.rankName}` });
+  for (const a of newAch) events.push({ type: 'ACHIEVEMENT_UNLOCKED', id: a.id, name: a.name });
+  emitProgress(events);
 }

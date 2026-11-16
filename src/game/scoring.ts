@@ -212,7 +212,7 @@ export function apply(s: ScoreState, ev: GameEvent): Award[] {
         const pts = RULES.region[kind];
         s.regionPts += pts;
         s.stats[REGION_STATS[kind]]++;
-        awards.push({ kind: 'region', pts, label: `${REGION_NAMES[kind]} Complete` });
+        awards.push({ kind: 'region', pts, label: `${REGION_NAMES[kind]} Complete`, region: k });
       }
       const n = Math.min(fresh.length, RULES.multiClear.length - 1);
       if (RULES.multiClear[n]) {

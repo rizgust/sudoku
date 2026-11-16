@@ -1123,10 +1123,27 @@ button.card { transition: transform .12s ease, box-shadow .12s ease; }
 :root[data-theme="dark"] .numpad.notes-mode .num:not(.active) { background: transparent; color: #d8d8d8; box-shadow: inset 0 0 0 2px #4a4a4a; }
 
 /* Rows and columns already holding the active digit. */
-:root { --line-shade: color-mix(in srgb, #9a9a9a 11%, var(--surface)); }
-:root[data-theme="dark"] { --line-shade: color-mix(in srgb, #ffffff 6%, var(--surface)); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --line-shade: color-mix(in srgb, #ffffff 6%, var(--surface)); } }
-.cell.line:not(.selected):not(.same):not(.error) { background: var(--line-shade); }
+/* Rows and columns that already hold the studied digit: a tint plus faint diagonal hatch
+   lines, so the shading reads clearly on both the light and the dark board. */
+:root {
+  --line-shade: color-mix(in srgb, #9a9a9a 14%, var(--surface));
+  --line-hatch: color-mix(in srgb, #6f7a72 16%, transparent);
+}
+:root[data-theme="dark"] {
+  --line-shade: color-mix(in srgb, #ffffff 10%, var(--surface));
+  --line-hatch: color-mix(in srgb, #ffffff 9%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --line-shade: color-mix(in srgb, #ffffff 10%, var(--surface));
+    --line-hatch: color-mix(in srgb, #ffffff 9%, transparent);
+  }
+}
+.cell.line:not(.selected):not(.same):not(.error) {
+  background:
+    repeating-linear-gradient(135deg, transparent 0 5px, var(--line-hatch) 5px 6.5px),
+    var(--line-shade);
+}
 
 /* Selected cell: solid forest green with light digits. */
 .cell.selected .value, .cell.selected.given .value, .cell.selected.user .value { color: #fff; }

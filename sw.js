@@ -1,7 +1,7 @@
 // Offline support.
 // Online: always fetch the latest version (so new deploys show up right away) and refresh the cache.
 // Offline or very slow network: fall back to the cached copy.
-const CACHE = 'sudoku-v3';
+const CACHE = 'sudoku-v4';
 const NETWORK_TIMEOUT_MS = 3000;
 const ASSETS = [
   './',

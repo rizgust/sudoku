@@ -129,6 +129,7 @@
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'num';
+      b.style.setProperty('--dc', `var(--d${d})`);
       b.innerHTML = `<span class="d">${d}</span><span class="left"></span>`;
       b.setAttribute('aria-label', `Enter ${d}`);
       bindNumButton(b, d);
@@ -798,6 +799,7 @@
     $('#btn-erase').disabled = done;
     $('#btn-autonotes').hidden = !assistsAllowed();
     $('#btn-autonotes').disabled = done;
+    $('#view-game').style.setProperty('--tc', `var(--t${game.tier || 1})`);
     $('#tools').style.setProperty('--tools', $$('#tools .tool:not([hidden])').length);
 
     $('#mistakes').textContent = game.mode === 'qual' ? `${game.mistakes}/1` : game.mistakes;
@@ -852,7 +854,7 @@
         const up = s.unlockProgress[t.id + 1];
         const qual = up && up.qualReady && t.id === s.unlocked
           ? `<button class="btn primary small qual-btn" type="button" data-qual="${t.id}">Take qualification <small>${up.quals}/${up.req.quals}</small></button>` : '';
-        return `<div class="tier-row-wrap">
+        return `<div class="tier-row-wrap" style="--tc:var(--t${t.id})">
           <button class="card tier-row" type="button" data-play="${t.id}">
             <span class="tier-num">${t.id}</span>
             <span class="tier-text"><b>${t.name}</b><small>${esc(t.blurb)}</small></span>
@@ -863,7 +865,7 @@
         const up = s.unlockProgress[t.id];
         const below = tierName(t.id - 1);
         const line = (label, cur, req) => req ? `<li class="${cur >= req ? 'met' : ''}">${cur >= req ? ICON_CHECK : '<i></i>'}${label} <b>${cur} / ${req}</b></li>` : '';
-        return `<div class="card tier-row locked next">
+        return `<div class="card tier-row locked next" style="--tc:var(--t${t.id})">
             <span class="tier-num">${ICON_LOCK}</span>
             <span class="tier-text"><b>${t.name}</b><small>${esc(t.blurb)}</small>
               <ul class="req">
@@ -875,7 +877,7 @@
             </span>
           </div>`;
       }
-      return `<div class="card tier-row locked">
+      return `<div class="card tier-row locked" style="--tc:var(--t${t.id})">
           <span class="tier-num">${ICON_LOCK}</span>
           <span class="tier-text"><b>${t.name}</b><small>Unlocks after ${tierName(t.id - 1)}</small></span>
         </div>`;
@@ -1145,7 +1147,7 @@
   function applyTheme() {
     if (settings.theme === 'auto') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', settings.theme);
-    const forced = settings.theme === 'dark' ? '#111318' : settings.theme === 'light' ? '#f3f2ee' : null;
+    const forced = settings.theme === 'dark' ? '#221c22' : settings.theme === 'light' ? '#fdf5ea' : null;
     themeMetas.forEach((m) => { m.content = forced || m.dataset.auto; });
   }
 

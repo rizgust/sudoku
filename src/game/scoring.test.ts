@@ -182,6 +182,14 @@ test('§7.2 / §15 penalties: 2 mistakes, 1 hint, assist → ×0.8 × 0.8 × 0.8
   assert.strictEqual(s.final?.total, Math.floor(1000 * 0.512));
 });
 
+test('guide lines are an assist: ×0.9 once, stacking with the others', () => {
+  const s = Scoring.create({ tier: 1, mode: 'classic' });
+  for (const type of ['GUIDES_USED', 'GUIDES_USED', 'ASSIST_ENABLED'] as const) Scoring.apply(s, { type });
+  Scoring.apply(s, { type: 'PUZZLE_COMPLETED', elapsed: 10000 });
+  assert.strictEqual(s.final?.G, 0.9);
+  assert.strictEqual(s.final?.total, Math.floor(1000 * 0.9 * 0.8));
+});
+
 test('§24.4 replay of the event log reproduces the score', () => {
   const init = { tier: 3, mode: 'classic' as ModeId };
   const s = Scoring.create(init);

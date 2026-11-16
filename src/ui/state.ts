@@ -15,6 +15,8 @@ export const MAX_HISTORY = 500;
 export interface Settings {
   highlightMistakes: boolean;
   highlightSame: boolean;
+  /** Shade the rows and columns that already hold the selected digit. */
+  guideLines: boolean;
   autoRemoveNotes: boolean;
   advancedAssists: boolean;
   vibrate: boolean;
@@ -48,6 +50,8 @@ export interface Game {
   mistakes: number;
   hints: number;
   assisted: boolean;
+  /** Guide lines were shown this attempt (score ×0.9). */
+  guided?: boolean;
   /** Game time in seconds, paused time excluded. */
   elapsed: number;
   start: number;
@@ -93,7 +97,7 @@ export const store = {
 };
 
 export const settings: Settings = Object.assign(
-  { highlightMistakes: true, highlightSame: true, autoRemoveNotes: true, advancedAssists: false, vibrate: true, theme: 'auto', scoreFx: true, chainHud: true, volume: 60, sfx: true, chainSfx: true, celebrationSfx: true } satisfies Settings,
+  { highlightMistakes: true, highlightSame: true, guideLines: true, autoRemoveNotes: true, advancedAssists: false, vibrate: true, theme: 'auto', scoreFx: true, chainHud: true, volume: 60, sfx: true, chainSfx: true, celebrationSfx: true } satisfies Settings,
   store.get<Partial<Settings>>(KEYS.settings, {}),
 );
 
@@ -140,6 +144,8 @@ export const playable = (): Game | null => (ui.view === 'game' && !ui.paused && 
 
 export const assistsAllowed = () => settings.advancedAssists && !!ui.game && ui.game.mode !== 'qual';
 export const hintsAllowed = () => !!ui.game && ui.game.mode !== 'qual';
+/** Guide lines are an assist, so qualifications don't show them. */
+export const guidesAllowed = () => settings.guideLines && !!ui.game && ui.game.mode !== 'qual';
 
 export const tierName = (id: number) => Progress.tier(id).name;
 export const today = () => Progress.dayKey(Date.now());

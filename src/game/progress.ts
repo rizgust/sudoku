@@ -20,6 +20,8 @@ export interface AttemptRecord {
   m: number;
   h: number;
   as: boolean;
+  /** Guide lines were shown. */
+  gl?: boolean;
   /** Final score and XP earned. */
   sc: number;
   xp: number;
@@ -33,6 +35,7 @@ export interface AttemptRecord {
   A?: number;
   H?: number;
   S?: number;
+  G?: number;
   /** Score breakdown: placement, regions, multi-clears, chains (effective/earned), completion, time. */
   sb?: { pl: number; rg: number; mc: number; ch: number; che: number; cb: number; tb: number };
   /** Region and chain stats for the attempt. */

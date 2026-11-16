@@ -53,6 +53,7 @@ export function initScoring(g: Game): void {
   for (let k = 0; k < (g.mistakes || 0); k++) Scoring.apply(g.score, { type: 'MISTAKE' });
   for (let k = 0; k < (g.hints || 0); k++) Scoring.apply(g.score, { type: 'HINT_USED' });
   if (g.assisted) Scoring.apply(g.score, { type: 'ASSIST_ENABLED' });
+  if (g.guided) Scoring.apply(g.score, { type: 'GUIDES_USED' });
 }
 
 // ---------- Game clock ----------

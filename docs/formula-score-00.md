@@ -381,6 +381,7 @@ FinalScore = floor(
     × AccuracyMultiplier
     × HintMultiplier
     × AssistMultiplier
+    × GuideMultiplier
     × ModeMultiplier
 )
 ```
@@ -914,6 +915,20 @@ AssistMultiplier =
 ```
 
 The penalty is applied once per attempt, not once per use.
+
+## 15.3a Guide Lines
+
+Guide lines shade every row and column that already holds the selected digit, which points straight at the cells where it can still go. They count as an assist.
+
+```text
+GuideMultiplier =
+    0.9 if guide lines were shown during the attempt
+    1.0 otherwise
+```
+
+The penalty applies the first time the shading appears and stays for the whole attempt; turning the setting off afterwards does not remove it. Qualifications never show guide lines.
+
+Introduced in scoring rules v3.
 
 ## 15.4 Mode Multipliers
 

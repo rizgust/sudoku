@@ -2,10 +2,10 @@
 import { BOX, COL, ROW, TECHNIQUES } from '../core/sudoku.ts';
 import * as Progress from '../game/progress.ts';
 import { input } from './actions.ts';
-import { $, $$, buzz, formatTime, ICON_PAUSE, ICON_PLAY } from './dom.ts';
-import { markTick } from './gameplay-events.ts';
+import { $, $$, buzz, formatTime, ICON_PAUSE, ICON_PLAY, toast } from './dom.ts';
+import { markTick, record } from './gameplay-events.ts';
 import { renderChain, renderScore } from './hud.ts';
-import { assistsAllowed, hintsAllowed, inProgress, settings, ui } from './state.ts';
+import { assistsAllowed, guidesAllowed, hintsAllowed, inProgress, saveGame, settings, ui, type Game } from './state.ts';
 
 interface CellEls { el: HTMLDivElement; val: HTMLSpanElement; notes: HTMLCollection }
 export const cells: CellEls[] = [];
@@ -86,6 +86,15 @@ function bindNumButton(b: HTMLButtonElement, d: number): void {
   });
 }
 
+/** Guide lines count as an assist: the first time they show, the attempt scores ×0.9. */
+function markGuided(game: Game): void {
+  if (game.guided) return;
+  game.guided = true;
+  record(game, { type: 'GUIDES_USED' });
+  saveGame();
+  if (game.mode !== 'practice') toast('Guide lines on: score ×0.9 for this puzzle');
+}
+
 export function setPaused(p: boolean): void {
   if (ui.paused && !p) markTick();
   ui.paused = !!p && inProgress();
@@ -122,8 +131,9 @@ export function render(): void {
   const counts = new Array<number>(10).fill(0);
   // Rows and columns that already hold that digit get shaded, so the open spots stand out.
   const lineRows = new Set<number>(), lineCols = new Set<number>();
-  if (selVal && !hintState) {
+  if (selVal && !hintState && guidesAllowed()) {
     for (let i = 0; i < 81; i++) if (values[i] === selVal) { lineRows.add(ROW[i]); lineCols.add(COL[i]); }
+    if (lineRows.size && !game.completed) markGuided(game);
   }
 
   const focus = new Set(hintState ? hintState.focus : []);

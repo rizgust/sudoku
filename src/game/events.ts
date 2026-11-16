@@ -42,6 +42,8 @@ export type GameEvent =
   | { type: 'MISTAKE'; cell?: number }
   | { type: 'HINT_USED' }
   | { type: 'ASSIST_ENABLED' }
+  /** Guide lines (row/column shading for the selected digit) were shown this attempt. */
+  | { type: 'GUIDES_USED' }
   /** `elapsed` is game time in seconds. */
   | { type: 'PUZZLE_COMPLETED'; elapsed: number };
 

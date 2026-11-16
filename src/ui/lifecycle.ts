@@ -77,6 +77,7 @@ export async function startGame({ mode, tier, tech = null }: StartOptions): Prom
     mistakes: 0,
     hints: 0,
     assisted: false,
+    guided: false,
     elapsed: 0,
     start: Date.now(),
     moved: false,
@@ -119,14 +120,14 @@ export function finish(res: AttemptRecord['res'], { silent = false, reason = nul
   const rec: AttemptRecord = {
     pid: game.pid, tier: game.tier, mode: game.mode, start: game.start, end,
     t: game.elapsed, wall: Math.round((end - game.start) / 1000), res,
-    m: game.mistakes, h: game.hints, as: game.assisted,
+    m: game.mistakes, h: game.hints, as: game.assisted, gl: !!game.guided,
     sc: sc ? sc.total : 0, xp, up: won && game.elapsed <= t.par, qp: qualPassed,
     tech: won ? game.techs : '',
   };
   // Breakdown, rules version and arcade stats, so results stay explainable after rule changes.
   if (sc) {
     Object.assign(rec, {
-      sv: sc.v, A: sc.A, H: sc.H, S: sc.S,
+      sv: sc.v, A: sc.A, H: sc.H, S: sc.S, G: sc.G,
       sb: { pl: sc.placement, rg: sc.region, mc: sc.multi, ch: sc.chain, che: sc.chainEarned, cb: sc.completion, tb: sc.time },
     });
   }

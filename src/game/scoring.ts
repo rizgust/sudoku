@@ -9,7 +9,7 @@ import type { Award, ChainPattern, ChainType, GameEvent, ModeId, PlacementTechni
 // Every tunable number lives here (§29). Bump `version` whenever a value changes;
 // each finished attempt stores the version it was scored with.
 export const RULES = {
-  version: 2, // 2: chain windows doubled
+  version: 3, // 2: chain windows doubled; 3: guide lines count as an assist
   // Indexed by tier id (1 Beginner … 6 Master).
   completion: [0, 1000, 2500, 5000, 10000, 20000, 40000],
   par: [0, 300, 480, 720, 1080, 1500, 2100],
@@ -41,6 +41,7 @@ export const RULES = {
   mistakeStep10: 1, // −10% per mistake
   hintStep10: 2,    // −20% per hint
   assist10: 8,      // ×0.8 once auto-fill candidates were used
+  guides10: 9,      // ×0.9 once guide lines were shown
   modes: {
     classic:  { mul10: 10, chains: true },
     qual:     { mul10: 10, chains: true },
@@ -78,7 +79,7 @@ export interface FinalScore {
   v: number;
   placement: number; region: number; multi: number;
   chainEarned: number; chain: number; completion: number; time: number; raw: number;
-  A: number; H: number; S: number; M: number;
+  A: number; H: number; S: number; G: number; M: number;
   total: number;
 }
 
@@ -94,6 +95,8 @@ export interface ScoreState {
   pts: Record<number, number>;
   placementPts: number; regionPts: number; multiPts: number; chainEarned: number;
   mistakes: number; hints: number; assisted: boolean;
+  /** Guide lines were shown at some point in the attempt. */
+  guided: boolean;
   /** Chain id → highest value already awarded. */
   runs: Record<number, number>;
   /** The chain currently on display. */
@@ -125,7 +128,7 @@ export function create({ tier, mode: m }: { tier: number; mode: ModeId }): Score
     regions: {},
     pts: {},
     placementPts: 0, regionPts: 0, multiPts: 0, chainEarned: 0,
-    mistakes: 0, hints: 0, assisted: false,
+    mistakes: 0, hints: 0, assisted: false, guided: false,
     runs: {},
     chain: null,
     open: null,
@@ -258,6 +261,9 @@ export function apply(s: ScoreState, ev: GameEvent): Award[] {
     case 'ASSIST_ENABLED':
       s.assisted = true;
       break;
+    case 'GUIDES_USED':
+      s.guided = true;
+      break;
     case 'PUZZLE_COMPLETED':
       closeChain(s);
       if (!s.final) s.final = finalize(s, ev.elapsed);
@@ -275,8 +281,9 @@ function penalties(s: ScoreState) {
   const a10 = Math.max(0, 10 - RULES.mistakeStep10 * s.mistakes);
   const h10 = Math.max(0, 10 - RULES.hintStep10 * s.hints);
   const s10 = s.assisted ? RULES.assist10 : 10;
+  const g10 = s.guided ? RULES.guides10 : 10;
   const m10 = mode(s.mode).mul10;
-  return { a10, h10, s10, m10, apply: (raw: number) => Math.max(0, Math.floor((raw * a10 * h10 * s10 * m10) / 10000)) };
+  return { a10, h10, s10, g10, m10, apply: (raw: number) => Math.max(0, Math.floor((raw * a10 * h10 * s10 * g10 * m10) / 100000)) };
 }
 
 /** TimeBonus = 0.5 × Completion × clamp((2·Par − t) / (1.5·Par), 0, 1), floored (§14). */
@@ -298,7 +305,7 @@ export function finalize(s: ScoreState, elapsed: number): FinalScore {
     v: RULES.version,
     placement: s.placementPts, region: s.regionPts, multi: s.multiPts,
     chainEarned: s.chainEarned, chain, completion, time, raw,
-    A: p.a10 / 10, H: p.h10 / 10, S: p.s10 / 10, M: p.m10 / 10,
+    A: p.a10 / 10, H: p.h10 / 10, S: p.s10 / 10, G: p.g10 / 10, M: p.m10 / 10,
     total: p.apply(raw),
   };
 }

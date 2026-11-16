@@ -64,6 +64,7 @@ export function showResult({ rec, sc, before, newAch, qualPassed, replay, reason
       ['Hints', `×${sc.H.toFixed(2)}`],
       ['Assists', `×${sc.S.toFixed(2)}`],
     ];
+    if (sc.G !== 1) rows.push(['Guide lines', `×${sc.G.toFixed(2)}`]);
     if (rec.mode === 'zen') rows.splice(3, 1); // chains are off in Zen
     if (sc.M !== 1) rows.push([mode.name, `×${sc.M.toFixed(2)}`]);
     $('#result-breakdown').innerHTML = rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');

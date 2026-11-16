@@ -1,8 +1,8 @@
 /* The board and number pad: building the DOM and rendering the game into it. */
-import { BOX, BOXES, COL, COLS, ROW, ROWS, TECHNIQUES } from '../core/sudoku.ts';
+import { BOX, COL, ROW, TECHNIQUES } from '../core/sudoku.ts';
 import * as Progress from '../game/progress.ts';
 import { input } from './actions.ts';
-import { $, $$, buzz, formatTime, ICON_PAUSE, ICON_PLAY, retrigger } from './dom.ts';
+import { $, $$, buzz, formatTime, ICON_PAUSE, ICON_PLAY } from './dom.ts';
 import { markTick } from './gameplay-events.ts';
 import { renderChain, renderScore } from './hud.ts';
 import { assistsAllowed, hintsAllowed, inProgress, settings, ui } from './state.ts';
@@ -84,20 +84,6 @@ function bindNumButton(b: HTMLButtonElement, d: number): void {
     input(d);
     render();
   });
-}
-
-/** Flashes every row, column and box through cell i that is now complete. */
-export function flashCompletedUnits(i: number): void {
-  const game = ui.game;
-  if (!game) return;
-  for (const unit of [ROWS[ROW[i]], COLS[COL[i]], BOXES[BOX[i]]]) {
-    if (!unit.every((k) => game.values[k] === game.solution[k])) continue;
-    unit.forEach((k, n) => {
-      const el = cells[k].el;
-      el.style.setProperty('--d', String(n));
-      retrigger(el, 'flash');
-    });
-  }
 }
 
 export function setPaused(p: boolean): void {

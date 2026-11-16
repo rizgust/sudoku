@@ -1,4 +1,5 @@
 /* The settings dialog and theme. */
+import { play, unlockAudio } from '../../effects/audio.ts';
 import { render } from '../board.ts';
 import { $, $$ } from '../dom.ts';
 import { saveSettings, settings } from '../state.ts';
@@ -31,12 +32,17 @@ export function openSettings(): void {
 
 export function bindSettings(): void {
   for (const el of $$<SettingInput>('[data-setting]')) {
+    const kind = el instanceof HTMLInputElement ? el.type : 'select';
+    const read = () => (kind === 'checkbox' ? (el as HTMLInputElement).checked : kind === 'range' ? Number(el.value) : el.value);
     el.addEventListener('change', () => {
-      const value = el instanceof HTMLInputElement && el.type === 'checkbox' ? el.checked : el.value;
-      (settings as unknown as Record<string, unknown>)[el.dataset.setting!] = value;
+      (settings as unknown as Record<string, unknown>)[el.dataset.setting!] = read();
       saveSettings();
       applyTheme();
       render();
+      // Let the player hear the new level or the sound they just enabled.
+      if (kind === 'range' || el.dataset.setting === 'sfx') { unlockAudio(); play('click'); }
+      else if (el.dataset.setting === 'chainSfx') { unlockAudio(); play('kachink', { chainLength: 3 }); }
+      else if (el.dataset.setting === 'celebrationSfx') { unlockAudio(); play('celebrate'); }
     });
   }
   if (typeof navigator.vibrate !== 'function') $('#setting-vibrate').hidden = true;

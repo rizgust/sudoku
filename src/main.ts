@@ -1,6 +1,7 @@
 /* Entry point: styles, board, event wiring, offline support and the saved game. */
 import { registerSW } from 'virtual:pwa-register';
 import './style.css';
+import { initEffects } from './effects/index.ts';
 import { buildBoard, setPaused } from './ui/board.ts';
 import { bindEvents } from './ui/bindings.ts';
 import { initScoring } from './ui/gameplay-events.ts';
@@ -11,6 +12,7 @@ import { isValidGame, KEYS, refresh, store, ui, type Game } from './ui/state.ts'
 initTheme();
 buildBoard();
 bindEvents();
+initEffects();
 
 // Offline support and "Add to Home Screen". Updates install in the background and apply on
 // the next launch. Caches left by the hand-written worker (before Vite) are removed.

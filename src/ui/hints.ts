@@ -2,7 +2,7 @@
 import * as Sudoku from '../core/sudoku.ts';
 import type { TechId } from '../core/sudoku.ts';
 import { clearPeerNotes, commit, snapshot } from './actions.ts';
-import { cells, flashCompletedUnits, render } from './board.ts';
+import { cells, render } from './board.ts';
 import { $, retrigger } from './dom.ts';
 import { breakChain, onCorrect, record } from './gameplay-events.ts';
 import { checkWin } from './lifecycle.ts';
@@ -80,9 +80,8 @@ export function applyHint(): void {
     game.notes[i] = 0;
     if (settings.autoRemoveNotes) clearPeerNotes(game, i, d);
     ui.selected = i;
-    onCorrect(game, i, d, { hinted: true });
     retrigger(cells[i].el, 'pop');
-    flashCompletedUnits(i);
+    onCorrect(game, i, d, { hinted: true });
     checkWin();
   } else {
     // Elimination: make sure the affected cells show candidates, then cross them out.

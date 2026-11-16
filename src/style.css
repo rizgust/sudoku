@@ -298,7 +298,7 @@ svg {
 }
 .cell.flash::after { animation: flash .7s ease-out calc(var(--d, 0) * 35ms); }
 .cell.shake .value { animation: shake .32s ease-in-out; }
-.cell.pop .value { animation: pop .18s ease-out; }
+.cell.pop .value { animation: pop .2s cubic-bezier(.34, 1.56, .64, 1); }
 
 @keyframes flash { 0% { opacity: 0; } 30% { opacity: .28; } 100% { opacity: 0; } }
 @keyframes shake {
@@ -306,7 +306,7 @@ svg {
   25% { transform: translateX(-12%); }
   75% { transform: translateX(12%); }
 }
-@keyframes pop { 0% { transform: scale(.7); } 100% { transform: scale(1); } }
+@keyframes pop { 0% { transform: scale(.85); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
 
 .board.paused .cell > * { visibility: hidden; }
 .board.paused .cell { background: var(--surface); }
@@ -1214,34 +1214,6 @@ dialog::backdrop { background: rgba(18, 26, 28, .45); backdrop-filter: blur(3px)
 
 .toast { border-radius: 16px; font-weight: 700; }
 
-/* Score feed: labelled points float up over the top of the board. Never takes input. */
-.score-feed {
-  position: absolute;
-  left: 0; right: 0; top: 10px;
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  pointer-events: none;
-  z-index: 3;
-}
-.feed-item {
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  color: var(--ok);
-  font-size: .8rem;
-  font-weight: 800;
-  white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
-  animation: feed-up 1.4s ease-out forwards;
-}
-.feed-item.chain { color: var(--accent); }
-.feed-item.multi { color: var(--accent); }
-@keyframes feed-up {
-  0% { opacity: 0; transform: translateY(6px); }
-  15% { opacity: 1; transform: translateY(0); }
-  75% { opacity: 1; }
-  100% { opacity: 0; transform: translateY(-14px); }
-}
-
 /* Chain indicator: one slim line in the gap under the board, so the board never moves. */
 .chain-hud {
   position: absolute;
@@ -1273,9 +1245,105 @@ dialog::backdrop { background: rgba(18, 26, 28, .45); backdrop-filter: blur(3px)
 @keyframes chain-pulse { to { transform: rotate(-90deg) scale(1.2); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .feed-item { animation-name: feed-fade; }
-  @keyframes feed-fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
   .score-pop.show { animation-duration: .01s; }
   .chain-hud.critical .chain-ring { animation: none; }
   .chain-ring .arc { transition: none; }
 }
+
+/* =====================================================================
+   Effects (docs/effect-00.md): overlay, banner, chain indicator states, result screen.
+   Colours: emerald and muted gold, plus one accent per chain type.
+   ===================================================================== */
+
+:root {
+  --fx-emerald: #1f9a62; --fx-gold: #b98a2a; --fx-cyan: #1a98aa;
+  --fx-blue: #3d6fd1; --fx-amber: #c9852b; --fx-red: #c8414f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --fx-emerald: #4fd08f; --fx-gold: #e4bb5e; --fx-cyan: #5fd3e0;
+    --fx-blue: #82a8ff; --fx-amber: #f2ac50; --fx-red: #ff7d8b;
+  }
+}
+:root[data-theme="dark"] {
+  --fx-emerald: #4fd08f; --fx-gold: #e4bb5e; --fx-cyan: #5fd3e0;
+  --fx-blue: #82a8ff; --fx-amber: #f2ac50; --fx-red: #ff7d8b;
+}
+
+/* Overlay above the board: never takes input, never changes layout. */
+.fx-layer { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.fx { position: absolute; pointer-events: none; will-change: transform, opacity; }
+.fx-glow { background: var(--fx-c); opacity: 0; border-radius: 4px; mix-blend-mode: normal; }
+.fx-ring { border: 2.5px solid var(--fx-c); border-radius: 30%; box-shadow: 0 0 10px var(--fx-c); }
+.fx-outline { border: 3px solid var(--fx-c); border-radius: 8px; box-shadow: 0 0 14px color-mix(in srgb, var(--fx-c) 55%, transparent); }
+.fx-burst { border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--fx-c) 70%, transparent) 0%, transparent 65%); }
+.fx-dot { border-radius: 50%; background: var(--fx-c); box-shadow: 0 0 6px var(--fx-c); }
+.fx-sweep { overflow: hidden; border-radius: 4px; }
+.fx-band { position: absolute; inset: 0; display: block; }
+.fx-band.x { background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--fx-c) 55%, transparent) 50%, transparent 100%); width: 60%; }
+.fx-band.y { background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--fx-c) 55%, transparent) 50%, transparent 100%); height: 60%; }
+.fx-band.diag { background: linear-gradient(135deg, transparent 30%, color-mix(in srgb, var(--fx-c) 35%, transparent) 50%, transparent 70%); width: 60%; height: 60%; }
+.fx-popup {
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 900; font-size: .95rem; color: var(--fx-c);
+  text-shadow: 0 1px 0 var(--surface), 0 0 6px var(--surface);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.fx-popup.lv2 { font-size: 1.05rem; }
+.fx-popup.lv3, .fx-popup.lv4 { font-size: 1.15rem; }
+.fx-popup.lv5 { font-size: 1.35rem; }
+
+/* The move's one dominant title and its reward summary, over the top of the board. */
+.fx-banner {
+  position: absolute; left: 0; right: 0; top: 12%;
+  display: flex; justify-content: center;
+  pointer-events: none; z-index: 5;
+}
+.fx-card {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 6px 16px 7px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, .18), inset 0 0 0 1.5px color-mix(in srgb, var(--fx-c) 45%, transparent);
+  color: var(--fx-c);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.fx-card b { font-weight: 900; letter-spacing: .04em; line-height: 1.1; font-size: .95rem; }
+.fx-card.md b { font-size: 1.15rem; }
+.fx-card.lg b { font-size: 1.35rem; }
+.fx-card.xl b { font-size: 1.6rem; text-shadow: 0 0 14px color-mix(in srgb, var(--fx-c) 45%, transparent); }
+.fx-card span { font-size: .78rem; font-weight: 800; color: var(--text); opacity: .85; }
+
+/* Chain indicator: fade out on expiry, surge on Great+, glow on Mega+, ring tick for Time. */
+.chain-hud { transition: opacity .25s ease-out; }
+.chain-hud.fading { opacity: 0; }
+.chain-hud.glow #chain-text { text-shadow: 0 0 8px currentColor; }
+.chain-hud.glow .chain-ring { filter: drop-shadow(0 0 3px currentColor); }
+.chain-hud.surge #chain-text {
+  background: linear-gradient(90deg, currentColor 0%, var(--fx-gold) 50%, currentColor 100%) 0 0 / 200% 100%;
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  animation: hud-surge .5s ease-out;
+}
+@keyframes hud-surge { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.chain-hud.tick .chain-ring { animation: hud-tick .35s ease-out; }
+@keyframes hud-tick { 50% { transform: rotate(-90deg) scale(1.35); } }
+
+/* Result screen celebrations (§H). */
+.result-fx { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 0; margin: 2px 0 4px; }
+.result-fx:empty { display: none; }
+.fx-line { font-weight: 900; font-size: .82rem; letter-spacing: .05em; animation: fx-line-in .5s cubic-bezier(.34, 1.56, .64, 1) both; }
+.fx-line + .fx-line { animation-delay: .15s; }
+.fx-line.gold { color: var(--fx-gold); }
+.fx-line.emerald { color: var(--fx-emerald); }
+@keyframes fx-line-in { from { opacity: 0; transform: scale(.8); } }
+.win-mark.gold { background: var(--fx-gold); box-shadow: 0 0 0 6px color-mix(in srgb, var(--fx-gold) 25%, transparent); animation: fx-mark .7s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes fx-mark { from { transform: scale(.6) rotate(-20deg); } }
+.result-news .news.fx-in { animation: fx-news-in .45s ease-out both; animation-delay: calc(var(--k, 0) * 90ms + .2s); }
+@keyframes fx-news-in { from { opacity: 0; transform: translateY(6px); } }
+.news.fx-unlock svg path { transform-origin: 16px 11px; animation: fx-shackle .6s .5s ease-out both; }
+@keyframes fx-shackle { to { transform: translateY(-3px) rotate(18deg); } }
+.news.fx-unlock b { animation: fx-glow-text 1.2s .5s ease-out both; }
+@keyframes fx-glow-text { 30% { text-shadow: 0 0 10px var(--fx-emerald); color: var(--fx-emerald); } }
+.news.fx-rank .medal { animation: fx-medal .8s .4s cubic-bezier(.34, 1.56, .64, 1) both; }
+@keyframes fx-medal { from { transform: scale(.3) rotate(-120deg); opacity: 0; } }

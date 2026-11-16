@@ -44,6 +44,7 @@
 
   let game = null;
   let selected = null;
+  let focusDigit = null;
   let notesMode = false;
   let paused = false;
   let view = 'home';
@@ -129,7 +130,6 @@
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'num';
-      b.style.setProperty('--dc', `var(--d${d})`);
       b.innerHTML = `<span class="d">${d}</span><span class="left"></span>`;
       b.setAttribute('aria-label', `Enter ${d}`);
       bindNumButton(b, d);
@@ -165,7 +165,10 @@
     b.addEventListener('contextmenu', (e) => e.preventDefault());
     b.addEventListener('click', () => {
       if (fired) { fired = false; return; }
+      // With no cell selected, tapping a digit toggles its line shading.
+      focusDigit = selected == null && focusDigit === d ? null : d;
       input(d);
+      render();
     });
   }
 
@@ -270,6 +273,7 @@
     const prev = game;
     game = null;
     selected = null;
+    focusDigit = null;
     notesMode = false;
     route('game');
     $('#loading-overlay').hidden = false;
@@ -338,6 +342,8 @@
   function select(i) {
     if (paused || !game || loading) return;
     selected = i;
+    // Tapping an empty cell releases any number highlight.
+    if (!game.values[i]) focusDigit = null;
     render();
   }
 
@@ -730,8 +736,14 @@
     if (!game) return;
     const { values, puzzle, solution, notes } = game;
     const sel = selected;
-    const selVal = sel != null ? values[sel] : 0;
+    // The digit being studied: the selected cell's value, else the last number-pad digit tapped.
+    const selVal = (sel != null ? values[sel] : 0) || focusDigit || 0;
     const counts = new Array(10).fill(0);
+    // Rows and columns that already hold that digit get shaded, so the open spots stand out.
+    const lineRows = new Set(), lineCols = new Set();
+    if (selVal && !hintState) {
+      for (let i = 0; i < 81; i++) if (values[i] === selVal) { lineRows.add(ROW[i]); lineCols.add(COL[i]); }
+    }
 
     const focus = new Set(hintState ? hintState.focus : []);
     const target = hintState?.kind === 'step' && hintState.step.place ? hintState.step.place[0] : (hintState?.cell ?? -1);
@@ -755,6 +767,7 @@
       cl.toggle('error', settings.highlightMistakes && !puzzle[i] && !!v && v !== solution[i]);
       cl.toggle('selected', i === sel);
       cl.toggle('peer', isPeer && !hintState);
+      cl.toggle('line', v !== selVal && (lineRows.has(ROW[i]) || lineCols.has(COL[i])));
       cl.toggle('same', settings.highlightSame && !!selVal && v === selVal && i !== sel);
       cl.toggle('hint-focus', focus.has(i));
       cl.toggle('hint-target', i === target);
@@ -776,6 +789,7 @@
       const b = numButtons[d - 1];
       b.querySelector('.left').textContent = left;
       b.classList.toggle('done', left === 0);
+      b.classList.toggle('active', d === selVal);
     }
 
     const t = Progress.tier(game.tier);
@@ -1147,7 +1161,7 @@
   function applyTheme() {
     if (settings.theme === 'auto') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', settings.theme);
-    const forced = settings.theme === 'dark' ? '#221c22' : settings.theme === 'light' ? '#fdf5ea' : null;
+    const forced = settings.theme === 'dark' ? '#1a2023' : settings.theme === 'light' ? '#f2f4ef' : null;
     themeMetas.forEach((m) => { m.content = forced || m.dataset.auto; });
   }
 
@@ -1274,7 +1288,7 @@
         case 'n': case 'N': toggleNotesMode(); break;
         case 'h': case 'H': hint(); break;
         case 'p': case 'P': if (game?.mode !== 'zen') setPaused(!paused); break;
-        case 'Escape': selected = null; hideHint(); render(); break;
+        case 'Escape': selected = null; focusDigit = null; hideHint(); render(); break;
       }
     });
 

@@ -14,11 +14,9 @@
   <title>Sudoku</title>
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800;900&display=swap">
-  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <!-- ================= Home ================= -->
@@ -310,11 +308,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-  <script src="sudoku.js"></script>
-  <script src="puzzles.js"></script>
-  <script src="scoring.js"></script>
-  <script src="chains.js"></script>
-  <script src="progress.js"></script>
-  <script src="app.js"></script>
+  <script type="module" src="./src/main.ts"></script>
 </body>
 </html>

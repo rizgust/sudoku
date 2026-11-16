@@ -1,25 +1,27 @@
 // Checks the scoring engine and chain detector against the examples in docs/formula-score-00.md.
-// Run: bun tools/test-scoring.js
-const assert = require('assert');
-const Scoring = require('../scoring.js');
-const Chains = require('../chains.js');
+// Run: bun run test
+import assert from 'node:assert/strict';
+import { test } from 'vitest';
+import * as Chains from './chains.ts';
+import type { ChainState, Placement } from './chains.ts';
+import type { Award, GameEvent, ModeId } from './events.ts';
+import * as Scoring from './scoring.ts';
+import type { ScoreState } from './scoring.ts';
 
-let passed = 0;
-const test = (name, fn) => { fn(); passed++; console.log(`ok  ${name}`); };
-const place = (id, cell, digit, t) => ({ id, cell, digit, row: (cell / 9) | 0, col: cell % 9, block: (((cell / 27) | 0) * 3) + (((cell % 9) / 3) | 0), t });
+const place = (id: number, cell: number, digit: number, t: number): Placement => ({ id, cell, digit, row: (cell / 9) | 0, col: cell % 9, block: (((cell / 27) | 0) * 3) + (((cell % 9) / 3) | 0), t });
 
 /** Feeds placements through detector + scoring like the game does; returns chain awards. */
-function play(s, cs, list, windowMs) {
-  const out = [];
+function play(s: ScoreState, cs: ChainState, list: Placement[], windowMs: number): Award[][] {
+  const out: Award[][] = [];
   for (const p of list) {
-    Scoring.apply(s, { type: 'NUMBER_PLACED', id: p.id, cell: p.cell });
+    Scoring.apply(s, { type: 'NUMBER_PLACED', id: p.id, cell: p.cell, digit: p.digit });
     const { closed, chain } = Chains.observe(cs, p, { windowMs, min: 3 });
     if (closed) Scoring.apply(s, { type: 'CHAIN_CLOSED', run: closed.run, reason: 'expired' });
     out.push(chain ? Scoring.apply(s, { type: 'CHAIN_EXTENDED', ...chain }) : []);
   }
   return out;
 }
-const close = (s, cs) => { const c = Chains.reset(cs); if (c) Scoring.apply(s, { type: 'CHAIN_CLOSED', run: c.run, reason: 'end' }); };
+const close = (s: ScoreState, cs: ChainState) => { const c = Chains.reset(cs); if (c) Scoring.apply(s, { type: 'CHAIN_CLOSED', run: c.run, reason: 'end' }); };
 
 test('§11.5 chain bonus example: Hard, 4 block placements of 100 → 640', () => {
   assert.strictEqual(Scoring.chainValue(400, 4, 'block', 4), 640);
@@ -27,7 +29,7 @@ test('§11.5 chain bonus example: Hard, 4 block placements of 100 → 640', () =
 
 test('§8.2 row + block placement pays 300 + 500 + 200 double clear', () => {
   const s = Scoring.create({ tier: 4, mode: 'classic' });
-  Scoring.apply(s, { type: 'NUMBER_PLACED', id: 1, cell: 0 });
+  Scoring.apply(s, { type: 'NUMBER_PLACED', id: 1, cell: 0, digit: 1 });
   const a = Scoring.apply(s, { type: 'REGION_COMPLETED', regions: ['r0', 'b0'] });
   assert.deepStrictEqual(a.map((x) => x.pts), [300, 500, 200]);
 });
@@ -40,8 +42,8 @@ test('§8.2 triple clear pays +400', () => {
 
 test('§6.6 cells and regions are credited once per attempt', () => {
   const s = Scoring.create({ tier: 1, mode: 'classic' });
-  Scoring.apply(s, { type: 'NUMBER_PLACED', id: 1, cell: 5 });
-  assert.strictEqual(Scoring.apply(s, { type: 'NUMBER_PLACED', id: 2, cell: 5 }).length, 0);
+  Scoring.apply(s, { type: 'NUMBER_PLACED', id: 1, cell: 5, digit: 1 });
+  assert.strictEqual(Scoring.apply(s, { type: 'NUMBER_PLACED', id: 2, cell: 5, digit: 1 }).length, 0);
   Scoring.apply(s, { type: 'REGION_COMPLETED', regions: ['r0'] });
   const again = Scoring.apply(s, { type: 'REGION_COMPLETED', regions: ['r0', 'c5'] });
   assert.deepStrictEqual(again.map((x) => x.pts), [300]); // only the new column, no double clear
@@ -67,7 +69,7 @@ test('§10.1 Hard block chain within 13 s pays incrementally (3 → 4 placements
   // 4 × 50 = 200 × (1.5 × 1.2 − 1) × 2.0 = 320, no longer Hybrid → pays 320 − 201
   assert.strictEqual(awards[3][0].pts, 119);
   assert.strictEqual(s.chainEarned, 320);
-  assert.strictEqual(s.chain.length, 4);
+  assert.strictEqual(s.chain?.length, 4);
 });
 
 test('an open chain closes when its window passes; its placements are not paid again', () => {
@@ -166,7 +168,7 @@ test('§12.3 chain bonus capped at 35% of raw score', () => {
   const s = Scoring.create({ tier: 1, mode: 'classic' });
   s.chainEarned = 1e6;
   Scoring.apply(s, { type: 'PUZZLE_COMPLETED', elapsed: 10000 }); // no time bonus
-  const f = s.final;
+  const f = s.final!;
   assert.strictEqual(f.completion, 1000);
   assert.strictEqual(f.chain, Math.floor((1000 * 35) / 65));
   assert.ok(f.chain / f.raw <= 0.35);
@@ -175,19 +177,19 @@ test('§12.3 chain bonus capped at 35% of raw score', () => {
 
 test('§7.2 / §15 penalties: 2 mistakes, 1 hint, assist → ×0.8 × 0.8 × 0.8', () => {
   const s = Scoring.create({ tier: 1, mode: 'classic' });
-  for (const type of ['MISTAKE', 'MISTAKE', 'HINT_USED', 'ASSIST_ENABLED', 'ASSIST_ENABLED']) Scoring.apply(s, { type });
+  for (const type of ['MISTAKE', 'MISTAKE', 'HINT_USED', 'ASSIST_ENABLED', 'ASSIST_ENABLED'] as const) Scoring.apply(s, { type });
   Scoring.apply(s, { type: 'PUZZLE_COMPLETED', elapsed: 10000 });
-  assert.strictEqual(s.final.total, Math.floor(1000 * 0.512));
+  assert.strictEqual(s.final?.total, Math.floor(1000 * 0.512));
 });
 
 test('§24.4 replay of the event log reproduces the score', () => {
-  const init = { tier: 3, mode: 'classic' };
+  const init = { tier: 3, mode: 'classic' as ModeId };
   const s = Scoring.create(init);
   const cs = Chains.create();
-  const log = [];
-  const rec = (ev) => { log.push(ev); Scoring.apply(s, ev); };
+  const log: GameEvent[] = [];
+  const rec = (ev: GameEvent) => { log.push(ev); Scoring.apply(s, ev); };
   [place(1, 0, 1, 0), place(2, 1, 2, 2000), place(3, 2, 3, 3000)].forEach((p) => {
-    rec({ type: 'NUMBER_PLACED', id: p.id, cell: p.cell });
+    rec({ type: 'NUMBER_PLACED', id: p.id, cell: p.cell, digit: p.digit });
     const { chain } = Chains.observe(cs, p, { windowMs: 20000, min: 3 });
     if (chain) rec({ type: 'CHAIN_EXTENDED', ...chain });
   });
@@ -196,4 +198,3 @@ test('§24.4 replay of the event log reproduces the score', () => {
   assert.deepStrictEqual(Scoring.replay(init, log).final, s.final);
 });
 
-console.log(`\n${passed} passed`);

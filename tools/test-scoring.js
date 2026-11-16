@@ -13,11 +13,13 @@ function play(s, cs, list, windowMs) {
   const out = [];
   for (const p of list) {
     Scoring.apply(s, { type: 'NUMBER_PLACED', id: p.id, cell: p.cell });
-    const r = Chains.observe(cs, p, { windowMs, min: 3 });
-    out.push(r ? Scoring.apply(s, { type: 'CHAIN_EXTENDED', ...r }) : []);
+    const { closed, chain } = Chains.observe(cs, p, { windowMs, min: 3 });
+    if (closed) Scoring.apply(s, { type: 'CHAIN_CLOSED', run: closed.run, reason: 'expired' });
+    out.push(chain ? Scoring.apply(s, { type: 'CHAIN_EXTENDED', ...chain }) : []);
   }
   return out;
 }
+const close = (s, cs) => { const c = Chains.reset(cs); if (c) Scoring.apply(s, { type: 'CHAIN_CLOSED', run: c.run, reason: 'end' }); };
 
 test('§11.5 chain bonus example: Hard, 4 block placements of 100 → 640', () => {
   assert.strictEqual(Scoring.chainValue(400, 4, 'block', 4), 640);
@@ -68,15 +70,63 @@ test('§10.1 Hard block chain within 13 s pays incrementally (3 → 4 placements
   assert.strictEqual(s.chain.length, 4);
 });
 
-test('§10.2 sliding window: expired placements drop out, no double payout', () => {
+test('an open chain closes when its window passes; its placements are not paid again', () => {
   const s = Scoring.create({ tier: 4, mode: 'classic' });
   const cs = Chains.create();
   const awards = play(s, cs, [
     place(1, 0, 1, 0), place(2, 1, 2, 4000), place(3, 2, 3, 9000), place(4, 9, 4, 13000),
-    place(5, 10, 5, 20000), // t=0 and t=4000 expire; 9000..20000 still a 3-chain in block 0
+    place(5, 10, 5, 20000), // past 0 + 15 s: chain 1 closes, this placement starts forming chain 2
   ], 15000);
-  assert.deepStrictEqual(awards[4], []); // a shorter overlapping sequence earns nothing new
+  assert.deepStrictEqual(awards[4], []);
   assert.strictEqual(s.chainEarned, 320);
+  assert.strictEqual(s.stats.chains, 1);
+  assert.strictEqual(s.stats.longest, 4);
+});
+
+test('lifecycle example: steady Beginner play earns chain A, then a separate chain B', () => {
+  const s = Scoring.create({ tier: 1, mode: 'classic' });
+  const cs = Chains.create();
+  // Cells in different rows, columns, blocks and digits: plain Time chains.
+  const awards = play(s, cs, [
+    place(1, 0, 3, 0), place(2, 13, 8, 5000), place(3, 26, 1, 9000), place(4, 30, 7, 15000),
+    place(5, 52, 2, 31000), place(6, 57, 4, 35000), place(7, 79, 6, 40000),
+  ], 30000);
+  const a = Scoring.chainValue(200, 4, 'time', 1); // chain A: 4 placements
+  const b = Scoring.chainValue(150, 3, 'time', 1); // chain B: 3 placements
+  assert.strictEqual(awards[6][0].pts, b);
+  assert.strictEqual(s.chainEarned, a + b);
+  assert.strictEqual(cs.run, 2);
+  close(s, cs);
+  assert.strictEqual(s.stats.chains, 2);
+});
+
+test('while forming, expired placements slide out so they never block a chain', () => {
+  const s = Scoring.create({ tier: 1, mode: 'classic' });
+  const cs = Chains.create();
+  play(s, cs, [place(1, 0, 1, 0), place(2, 40, 2, 20000), place(3, 80, 3, 35000), place(4, 4, 4, 45000)], 30000);
+  // t=0 expired before a chain formed; 20 s, 35 s, 45 s fit in 30 s and form one.
+  assert.strictEqual(cs.run, 1);
+  assert.strictEqual(s.chainEarned, Scoring.chainValue(150, 3, 'time', 1));
+});
+
+test('Hybrid is Time + Block + Line only', () => {
+  const s = Scoring.create({ tier: 1, mode: 'classic' });
+  const cs = Chains.create();
+  const awards = play(s, cs, [place(1, 0, 1, 0), place(2, 1, 2, 100), place(3, 2, 3, 200)], 30000); // row 0, block 0
+  assert.match(awards[2][0].label, /^Hybrid Block Chain/);
+  close(s, cs);
+  assert.deepStrictEqual(s.stats.byType, { time: 1, number: 0, block: 1, line: 1, hybrid: 1 });
+});
+
+test('achievement counters move once per finished chain, not per extension', () => {
+  const s = Scoring.create({ tier: 1, mode: 'classic' });
+  const cs = Chains.create();
+  play(s, cs, [0, 1, 2, 9, 10, 11, 18, 19].map((c, k) => place(k + 1, c, k + 1, k * 1000)), 30000); // 8 in block 0
+  assert.strictEqual(s.stats.chains, 0); // still open
+  close(s, cs);
+  assert.strictEqual(s.stats.chains, 1);
+  assert.strictEqual(s.stats.byType.block, 1);
+  assert.strictEqual(s.stats.longest, 8);
 });
 
 test('§10.3 a mistake ends the run; the next qualifying chain is a new run', () => {
@@ -85,12 +135,14 @@ test('§10.3 a mistake ends the run; the next qualifying chain is a new run', ()
   play(s, cs, [place(1, 0, 1, 0), place(2, 40, 2, 1000), place(3, 80, 3, 2000)], 30000);
   const first = s.chainEarned;
   assert.ok(first > 0);
+  close(s, cs);
   Scoring.apply(s, { type: 'MISTAKE' });
-  Chains.reset(cs);
   play(s, cs, [place(4, 3, 4, 3000), place(5, 43, 5, 4000)], 30000);
   assert.strictEqual(s.chainEarned, first); // two placements after the reset don't qualify
   play(s, cs, [place(6, 70, 6, 5000)], 30000);
   assert.strictEqual(s.chainEarned, first * 2);
+  assert.strictEqual(s.stats.chains, 1); // the second chain is still open
+  close(s, cs);
   assert.strictEqual(s.stats.chains, 2);
 });
 
@@ -136,8 +188,8 @@ test('§24.4 replay of the event log reproduces the score', () => {
   const rec = (ev) => { log.push(ev); Scoring.apply(s, ev); };
   [place(1, 0, 1, 0), place(2, 1, 2, 2000), place(3, 2, 3, 3000)].forEach((p) => {
     rec({ type: 'NUMBER_PLACED', id: p.id, cell: p.cell });
-    const r = Chains.observe(cs, p, { windowMs: 20000, min: 3 });
-    if (r) rec({ type: 'CHAIN_EXTENDED', ...r });
+    const { chain } = Chains.observe(cs, p, { windowMs: 20000, min: 3 });
+    if (chain) rec({ type: 'CHAIN_EXTENDED', ...chain });
   });
   rec({ type: 'REGION_COMPLETED', regions: ['r0'] });
   rec({ type: 'PUZZLE_COMPLETED', elapsed: 500 });

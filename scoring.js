@@ -5,7 +5,7 @@
      CELL_REVEALED    { cell }                   a hint filled the cell: no placement points
      REGION_COMPLETED { regions: ['r0','c4','b1'] } regions completed by one board change
      CHAIN_EXTENDED   { run, patterns: [{ type, ids, firstT }] }  from the chain detector
-     CHAIN_BROKEN     {}                         interruption
+     CHAIN_CLOSED     { run, reason }            the chain's window passed or play interrupted it
      MISTAKE / HINT_USED / ASSIST_ENABLED        penalty events
      PUZZLE_COMPLETED { elapsed }                elapsed in seconds
 
@@ -41,6 +41,9 @@ const Scoring = (() => {
     chainType100: { time: 100, number: 110, row: 115, col: 115, block: 120 },
     // Tie-break when two patterns pay the same: strongest factor first, so results are stable.
     chainPriority: ['block', 'row', 'col', 'number', 'time'],
+    // Hybrid = Time + Block + Line (§9.E). In valid Sudoku a Number chain can't share three
+    // cells with a Block or Line chain (a digit appears once per unit), so those combinations
+    // can never happen; v1 defines Hybrid as the one combination that can.
     hybridPct: 20,
     chainCapPct: 35, // chain bonus ≤ 35% of the raw score
 
@@ -78,14 +81,14 @@ const Scoring = (() => {
       pts: {},                       // placement id → placement points
       placementPts: 0, regionPts: 0, multiPts: 0, chainEarned: 0,
       mistakes: 0, hints: 0, assisted: false,
-      runs: {},                      // chain run → highest value already awarded
+      runs: {},                      // chain id → highest value already awarded
       chain: null,                   // the chain currently on display
+      open: null,                    // the open chain's running totals, finalized on close
       stats: {
         rows: 0, cols: 0, blocks: 0, double: 0, triple: 0,
         chains: 0, byType: { time: 0, number: 0, block: 0, line: 0, hybrid: 0 },
         longest: 0, bestChain: 0,
       },
-      runTypes: {},                  // types already counted for the current run
       final: null,
     };
   }
@@ -107,13 +110,28 @@ const Scoring = (() => {
         (value === best.value && RULES.chainPriority.indexOf(p.type) < RULES.chainPriority.indexOf(best.type));
       if (better) best = { type: p.type, length: p.ids.length, firstT: p.firstT, points, value };
     }
-    // Hybrid: Time plus at least two distinct other categories (row and column are both Line).
-    const cats = new Set(patterns.filter((p) => p.type !== 'time').map((p) => TYPE_NAMES[p.type]));
-    best.hybrid = patterns.some((p) => p.type === 'time') && cats.size >= 2;
+    best.hybrid = isHybrid(patterns);
     best.hybridValue = best.hybrid ? Math.floor((best.value * RULES.hybridPct) / 100) : 0;
     best.total = best.value + best.hybridValue;
     best.mul100 = lengthMul100(best.length);
     return best;
+  }
+
+  const has = (patterns, ...types) => patterns.some((p) => types.includes(p.type));
+  const isHybrid = (patterns) => has(patterns, 'time') && has(patterns, 'block') && has(patterns, 'row', 'col');
+
+  /** Records a finished chain in the attempt stats, once per chain (achievements read these). */
+  function closeChain(s) {
+    const o = s.open;
+    s.open = null;
+    s.chain = null;
+    if (!o) return;
+    const st = s.stats;
+    st.chains++;
+    for (const t of Object.keys(o.types)) st.byType[t]++;
+    if (o.hybrid) st.byType.hybrid++;
+    st.longest = Math.max(st.longest, o.longest);
+    st.bestChain = Math.max(st.bestChain, s.runs[o.run] || 0);
   }
 
   const chainLabel = (c) => `${c.hybrid ? 'Hybrid ' : ''}${TYPE_NAMES[c.type]} Chain ×${(c.mul100 / 100).toFixed(1)}`;
@@ -133,8 +151,7 @@ const Scoring = (() => {
         break;
       }
       case 'CELL_REVEALED':
-        s.cells[ev.cell] = 1;
-        s.chain = null;
+        s.cells[ev.cell] = 1; // the game sends CHAIN_CLOSED separately when a hint interrupts
         break;
       case 'REGION_COMPLETED': {
         const fresh = ev.regions.filter((k) => !s.regions[k]);
@@ -155,29 +172,33 @@ const Scoring = (() => {
       }
       case 'CHAIN_EXTENDED': {
         if (!chainsEnabled(s.mode) || !ev.patterns.length) break;
+        if (s.open && s.open.run !== ev.run) closeChain(s);
+        if (!s.open) s.open = { run: ev.run, types: {}, hybrid: false, longest: 0 };
         const c = bestChain(s, ev.patterns);
-        if (!s.runs[ev.run]) { s.runTypes = {}; s.stats.chains++; }
-        // Incremental accounting: pay only what exceeds the run's best value so far (§12.1).
+        // Incremental accounting: pay only what exceeds this chain's best value so far (§12.1).
         const prev = s.runs[ev.run] || 0;
         const inc = Math.max(0, c.total - prev);
         s.runs[ev.run] = Math.max(prev, c.total);
         s.chainEarned += inc;
-        const st = s.stats;
-        for (const t of [c.type === 'row' || c.type === 'col' ? 'line' : c.type, c.hybrid && 'hybrid']) {
-          if (t && !s.runTypes[t]) { s.runTypes[t] = 1; st.byType[t]++; }
-        }
-        st.longest = Math.max(st.longest, c.length);
-        st.bestChain = Math.max(st.bestChain, s.runs[ev.run]);
-        s.chain = { run: ev.run, type: c.type, hybrid: c.hybrid, length: c.length, points: c.points, mul100: c.mul100, firstT: c.firstT, label: chainLabel(c) };
+        const o = s.open;
+        for (const p of ev.patterns) o.types[p.type === 'row' || p.type === 'col' ? 'line' : p.type] = 1;
+        o.hybrid = o.hybrid || c.hybrid;
+        const time = ev.patterns.find((p) => p.type === 'time');
+        o.longest = Math.max(o.longest, time ? time.ids.length : c.length);
+        s.chain = {
+          run: ev.run, type: c.type, hybrid: c.hybrid, length: c.length, points: c.points, mul100: c.mul100,
+          startT: time ? time.firstT : c.firstT, label: chainLabel(c),
+        };
         if (inc) awards.push({ kind: 'chain', pts: inc, label: `${chainLabel(c)}!` });
         break;
       }
-      case 'CHAIN_BROKEN':
-        s.chain = null;
+      case 'CHAIN_CLOSED':
+      case 'CHAIN_BROKEN': // older saved games
+        closeChain(s);
         break;
       case 'MISTAKE':
         s.mistakes++;
-        s.chain = null;
+        closeChain(s);
         break;
       case 'HINT_USED':
         s.hints++;
@@ -186,8 +207,8 @@ const Scoring = (() => {
         s.assisted = true;
         break;
       case 'PUZZLE_COMPLETED':
+        closeChain(s);
         if (!s.final) s.final = finalize(s, ev.elapsed);
-        s.chain = null;
         break;
     }
     return awards;

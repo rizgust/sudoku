@@ -363,10 +363,19 @@
   let tickAt = performance.now();
   const clockMs = () => game.elapsed * 1000 + Math.min(999, Math.max(0, performance.now() - tickAt));
 
-  function breakChain() {
-    if (!game.chain.recent.length && !game.score.chain) return;
-    Chains.reset(game.chain);
-    record({ type: 'CHAIN_BROKEN' });
+  const chainOpts = () => ({ windowMs: Scoring.chainWindowMs(game.tier), min: Scoring.RULES.chainMin });
+
+  /** Ends the current chain because play interrupted it; scoring finalizes an open chain. */
+  function breakChain(reason) {
+    const closed = Chains.reset(game.chain);
+    if (closed) record({ type: 'CHAIN_CLOSED', run: closed.run, reason });
+  }
+
+  /** Closes an open chain once its window has passed, even if no placement follows. */
+  function expireChain() {
+    if (!game || !game.chain || !game.chain.active) return;
+    const closed = Chains.expire(game.chain, Math.round(clockMs()), chainOpts());
+    if (closed) { record({ type: 'CHAIN_CLOSED', run: closed.run, reason: 'expired' }); saveGame(); }
   }
 
   function completedRegions(i) {
@@ -388,7 +397,7 @@
     let id = null;
     if (hinted) {
       record({ type: 'CELL_REVEALED', cell: i });
-      breakChain();
+      breakChain('hint');
     } else if (fresh) {
       id = ++game.seq;
       // No technique attribution yet, so the placement earns the default reward.
@@ -398,8 +407,9 @@
     if (regions.length) record({ type: 'REGION_COMPLETED', regions });
     if (id != null && Scoring.chainsEnabled(game.mode)) {
       const p = { id, cell: i, digit: d, row: ROW[i], col: COL[i], block: BOX[i], t: Math.round(clockMs()) };
-      const r = Chains.observe(game.chain, p, { windowMs: Scoring.chainWindowMs(game.tier), min: Scoring.RULES.chainMin });
-      if (r) record({ type: 'CHAIN_EXTENDED', placementId: id, ...r });
+      const { closed, chain } = Chains.observe(game.chain, p, chainOpts());
+      if (closed) record({ type: 'CHAIN_CLOSED', run: closed.run, reason: 'expired' });
+      if (chain) record({ type: 'CHAIN_EXTENDED', placementId: id, ...chain });
     }
   }
 
@@ -424,7 +434,7 @@
     const hud = $('#chain-hud');
     const c = game && game.score && game.score.chain;
     const win = game ? Scoring.chainWindowMs(game.tier) : 0;
-    const left = c ? win - (clockMs() - c.firstT) : 0;
+    const left = c ? win - (clockMs() - c.startT) : 0;
     const show = !!c && settings.chainHud && inProgress() && left > 0 && Scoring.chainsEnabled(game.mode);
     hud.hidden = !show;
     if (!show) { clearInterval(chainTimer); chainTimer = null; return; }
@@ -487,7 +497,7 @@
 
     if (d !== game.solution[i]) {
       game.mistakes++;
-      Chains.reset(game.chain);
+      breakChain('mistake');
       record({ type: 'MISTAKE' });
       retrigger(cells[i].el, 'shake');
       buzz([35, 50, 35]);
@@ -512,7 +522,7 @@
     hideHint();
     snapshot();
     // Clearing a credited digit interrupts the chain; clearing a wrong one or notes doesn't.
-    if (game.values[i] && game.values[i] === game.solution[i]) breakChain();
+    if (game.values[i] && game.values[i] === game.solution[i]) breakChain('clear');
     game.values[i] = 0;
     game.notes[i] = 0;
     commit();
@@ -524,7 +534,7 @@
     const s = game.history.pop();
     // Undo that changes the confirmed board ends the chain. Mistakes, hints and credited
     // cells and regions stay recorded, so undo/redo can't farm points.
-    if (s.v.some((v, k) => v !== game.values[k])) breakChain();
+    if (s.v.some((v, k) => v !== game.values[k])) breakChain('undo');
     game.values = s.v;
     game.notes = s.n;
     commit();
@@ -615,7 +625,7 @@
     }
     game.hints++;
     record({ type: 'HINT_USED' });
-    breakChain();
+    breakChain('hint');
     // A hinted answer can't earn placement points, even if the player types it in.
     const answer = h.kind === 'reveal' ? h.cell : h.kind === 'step' && h.step.place ? h.step.place[0] : null;
     if (answer != null && !game.credited[answer]) {
@@ -689,7 +699,7 @@
     const t = Progress.tier(game.tier);
     const end = Date.now();
     const won = res === 'won';
-    Chains.reset(game.chain);
+    breakChain('end');
     if (won) record({ type: 'PUZZLE_COMPLETED', elapsed: game.elapsed });
     const sc = won ? game.score.final : null;
     const st = game.score.stats;
@@ -752,7 +762,10 @@
 
     const prevBest = before.perTier[rec.tier].bestTime;
     const isBest = won && rec.mode !== 'zen' && rec.mode !== 'practice' && (prevBest == null || rec.t < prevBest);
-    const isHigh = won && rec.sc > before.perTier[rec.tier].bestScore && rec.mode !== 'practice';
+    // High scores compare only within the same scoring rules. The first score under new rules
+    // sets the baseline instead of claiming a record just because the scale changed.
+    const prevHigh = before.perTier[rec.tier].bestScore;
+    const isHigh = won && rec.mode !== 'practice' && prevHigh > 0 && rec.sc > prevHigh;
     const tags = [`${mode.name} · ${t.name}`];
     if (isBest) tags.push('New best time');
     else if (isHigh) tags.push('New high score');
@@ -1108,7 +1121,10 @@
       'Win rate': rows.length ? pct(wins.length / rows.length) : '–',
       'Best time': timed.length ? formatTime(Math.min(...timed.map((a) => a.t))) : '–',
       'Average time': timed.length ? formatTime(avg(timed.map((a) => a.t))) : '–',
-      'Best score': wins.length ? fmt(Math.max(...wins.map((a) => a.sc))) : '–',
+      'Best score': (() => {
+        const cur = wins.filter((a) => Progress.scoreVersion(a) === Progress.SCORE_VERSION && a.mode !== 'practice');
+        return cur.length ? fmt(Math.max(...cur.map((a) => a.sc))) : '–';
+      })(),
       'Clean games': wins.filter(Progress.isClean).length,
       'Mistakes per game': wins.length ? avg(wins.map((a) => a.m)).toFixed(1) : '–',
       'Hints per game': wins.length ? avg(wins.map((a) => a.h)).toFixed(1) : '–',
@@ -1174,7 +1190,7 @@
           <thead><tr><th></th><th>Best time</th><th>High score</th><th>Time Attack</th><th>Rank</th></tr></thead>
           <tbody>${TIERS.map((t) => {
             const pt = s.perTier[t.id];
-            return `<tr><td>${t.name}</td><td>${pt.bestTime != null ? formatTime(pt.bestTime) : '–'}</td><td>${pt.bestScore ? fmt(pt.bestScore) : '–'}</td><td>${pt.timeAttackBest != null ? formatTime(pt.timeAttackBest) : '–'}</td><td><span class="medal r${s.mastery[t.id].rank}" title="${s.mastery[t.id].rankName}"></span></td></tr>`;
+            return `<tr><td>${t.name}</td><td>${pt.bestTime != null ? formatTime(pt.bestTime) : '–'}</td><td>${pt.bestScore ? fmt(pt.bestScore) : pt.legacyBestScore ? `<span class="muted" title="Scored under the old rules">${fmt(pt.legacyBestScore)}*</span>` : '–'}</td><td>${pt.timeAttackBest != null ? formatTime(pt.timeAttackBest) : '–'}</td><td><span class="medal r${s.mastery[t.id].rank}" title="${s.mastery[t.id].rankName}"></span></td></tr>`;
           }).join('')}</tbody>
         </table>
         <table class="kv">
@@ -1182,6 +1198,7 @@
           <tr><td>Daily challenges</td><td>${s.dailyCount} · best ${s.dailyStreak.best} in a row</td></tr>
           <tr><td>Best daily score</td><td>${s.dailyBest ? fmt(s.dailyBest) : '–'}</td></tr>
         </table>
+        ${H.some((a) => a.res === 'won' && Progress.scoreVersion(a) !== Progress.SCORE_VERSION) ? '<p class="muted small">* Scored under the old rules. Kept as they were, but not compared with current scores.</p>' : ''}
       </div>
 
       ${arcadeStats(rows)}
@@ -1200,7 +1217,7 @@
             <td>${tierName(a.tier)}<small class="muted"> ${MODES[a.mode].name}</small></td>
             <td class="res-${a.res}">${a.res === 'won' ? (Progress.isClean(a) ? 'Clean' : 'Won') : a.res === 'failed' ? 'Failed' : 'Abandoned'}</td>
             <td>${a.mode === 'zen' ? '–' : formatTime(a.t)}</td>
-            <td>${a.res === 'won' && a.mode !== 'practice' ? fmt(a.sc) : '–'}</td>
+            <td>${a.res !== 'won' || a.mode === 'practice' ? '–' : Progress.scoreVersion(a) === Progress.SCORE_VERSION ? fmt(a.sc) : `<span class="muted" title="Scored under the old rules">${fmt(a.sc)}*</span>`}</td>
           </tr>`).join('')}</tbody>
         </table>` : '<p class="muted small">No games yet.</p>'}
       </div>
@@ -1209,7 +1226,7 @@
 
   /** Region and chain totals from attempts scored by the event engine (they carry `ar`). */
   function arcadeStats(rows) {
-    const list = rows.filter((a) => a.ar);
+    const list = rows.filter((a) => a.ar && a.res === 'won');
     if (!list.length) return '';
     const sum = (k) => list.reduce((x, a) => x + (a.ar[k] || 0), 0);
     const max = (k) => Math.max(0, ...list.map((a) => a.ar[k] || 0));
@@ -1466,6 +1483,7 @@
       game.elapsed++;
       tickAt = performance.now();
       renderTimer();
+      expireChain();
       if (game.mode === 'time' && game.elapsed >= Progress.tier(game.tier).par) {
         finish('failed', { reason: 'time' });
         return;

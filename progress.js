@@ -96,6 +96,12 @@ const Progress = (() => {
 
   // ---------- Summaries from history ----------
 
+  // Scores are only comparable within one scoring rules version. Attempts from before
+  // event scoring have no `sv` and count as version 0. Their scores stay as they were.
+  const SCORE_VERSION = SCORE_RULES.version;
+  const scoreVersion = (a) => a.sv || 0;
+  const sameRules = (a) => scoreVersion(a) === SCORE_VERSION;
+
   const isWin = (a) => a.res === 'won';
   const isClean = (a) => isWin(a) && a.m === 0 && a.h === 0;
 
@@ -111,7 +117,7 @@ const Progress = (() => {
       perTier[t.id] = {
         played: 0, completed: 0, abandoned: 0, failed: 0, clean: 0, quals: 0, qualAttempts: 0,
         progCompleted: 0, progClean: 0, progUnderPar: 0,
-        bestTime: null, bestScore: 0, totalTime: 0, mistakes: 0, hints: 0, times: [],
+        bestTime: null, bestScore: 0, legacyBestScore: 0, totalTime: 0, mistakes: 0, hints: 0, times: [],
         timeAttackBest: null, cleanStreak: 0, bestCleanStreak: 0,
       };
     }
@@ -123,6 +129,8 @@ const Progress = (() => {
     const playDays = [], dailyDays = [];
     let dailyBest = 0, dailyCount = 0;
     const techCounts = {};
+    // Chain totals from finished chains in completed games (each chain is counted once, when it closes).
+    const chainStats = { chains: 0, time: 0, number: 0, block: 0, line: 0, hybrid: 0, longest: 0, best: 0 };
 
     for (const a of H) {
       const pt = perTier[a.tier];
@@ -146,7 +154,13 @@ const Progress = (() => {
       pt.mistakes += a.m;
       pt.hints += a.h;
       pt.times.push({ t: a.t, end: a.end, mode: a.mode });
-      if (a.sc > pt.bestScore) pt.bestScore = a.sc;
+      if (sameRules(a)) { if (a.sc > pt.bestScore) pt.bestScore = a.sc; }
+      else if (a.sc > pt.legacyBestScore) pt.legacyBestScore = a.sc;
+      if (a.ar) {
+        for (const k of ['chains', 'time', 'number', 'block', 'line', 'hybrid']) chainStats[k] += a.ar[k] || 0;
+        chainStats.longest = Math.max(chainStats.longest, a.ar.longest || 0);
+        chainStats.best = Math.max(chainStats.best, a.ar.best || 0);
+      }
       if (a.mode !== 'zen' && a.mode !== 'practice' && (pt.bestTime == null || a.t < pt.bestTime)) pt.bestTime = a.t;
       if (a.mode === 'time' && (pt.timeAttackBest == null || a.t < pt.timeAttackBest)) pt.timeAttackBest = a.t;
       if (a.mode === 'time') timeAttackWins++;
@@ -173,7 +187,7 @@ const Progress = (() => {
       if (a.mode === 'daily' && !solvedPids.has(a.pid)) {
         dailyCount++;
         dailyDays.push(a.pid.slice(6));
-        dailyBest = Math.max(dailyBest, a.sc);
+        if (sameRules(a)) dailyBest = Math.max(dailyBest, a.sc);
       }
       solvedPids.add(a.pid);
 
@@ -233,7 +247,7 @@ const Progress = (() => {
       failed: H.filter((a) => a.res === 'failed').length,
       streak: st, dailyStreak: dst, dailyCount, dailyBest, dailyDoneToday: H.some((a) => a.mode === 'daily' && isWin(a) && a.pid === `daily-${today}`),
       bestCleanRun, underPar, noHint, timeAttackWins, zenWins, nightOwl, comeback, marathon, lightning,
-      perTier, unlocked, unlockProgress, mastery, techCounts,
+      perTier, unlocked, unlockProgress, mastery, techCounts, chainStats,
       practiced: Object.keys(profile.practiced || {}).length,
       hiddenFound: 0,
     };
@@ -295,6 +309,16 @@ const Progress = (() => {
     A('professor', 'Learning', 'Professor', 'Practice 16 different techniques', 800, (s) => [s.practiced, 16]),
     A('chain-reader', 'Learning', 'Chain Reader', 'Complete a puzzle that needs a chain', 400, (s) => [(s.techCounts.xChain || 0) + (s.techCounts.xyChain || 0) > 0 ? 1 : 0, 1]),
 
+    A('chain-first', 'Chains', 'Chain Reaction', 'Finish a puzzle with at least one chain', 50, (s) => [s.chainStats.chains, 1]),
+    A('chain-number', 'Chains', 'Number Hunter', 'Complete a Number Chain: the same digit three times in a row', 100, (s) => [s.chainStats.number, 1]),
+    A('chain-block-25', 'Chains', 'Block Master', 'Complete 25 Block Chains', 300, (s) => [s.chainStats.block, 25]),
+    A('chain-line-25', 'Chains', 'Line Runner', 'Complete 25 Line Chains', 300, (s) => [s.chainStats.line, 25]),
+    A('chain-6', 'Chains', 'In the Zone', 'Reach 6 placements in one chain', 150, (s) => [s.chainStats.longest, 6]),
+    A('chain-8', 'Chains', 'Legendary', 'Reach 8 placements in one chain', 400, (s) => [s.chainStats.longest, 8]),
+    A('chain-hybrid-10', 'Chains', 'Hybrid Specialist', 'Complete 10 Hybrid Chains (same block and same line)', 400, (s) => [s.chainStats.hybrid, 10]),
+    A('chain-100', 'Chains', 'Chain Addict', 'Complete 100 chains', 600, (s) => [s.chainStats.chains, 100]),
+    A('chain-jackpot', 'Chains', 'Jackpot', 'Earn 2,000+ points from one chain', 500, (s) => [s.chainStats.best >= 2000 ? 1 : 0, 1]),
+
     A('night-owl', 'Hidden', 'Night Owl', 'Complete a puzzle between midnight and 4 AM', 100, (s) => [s.nightOwl ? 1 : 0, 1], true),
     A('lightning', 'Hidden', 'Lightning', 'Complete a Beginner puzzle in under 2 minutes', 150, (s) => [s.lightning ? 1 : 0, 1], true),
     A('comeback', 'Hidden', 'Never Give Up', 'Finish a puzzle after making 5 or more mistakes', 100, (s) => [s.comeback ? 1 : 0, 1], true),
@@ -326,7 +350,7 @@ const Progress = (() => {
 
   return {
     TIERS, tier, UNLOCK, RANKS, MODES, ACHIEVEMENTS,
-    xpFor, levelInfo, summarize, awardAchievements, dailyInfo, dayKey, isClean,
+    xpFor, levelInfo, summarize, awardAchievements, dailyInfo, dayKey, isClean, scoreVersion, SCORE_VERSION,
   };
 })();
 

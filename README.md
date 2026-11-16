@@ -5,6 +5,7 @@ A clean, ad-free Sudoku where every difficulty is earned. TypeScript and plain D
 - **Six tiers graded by technique**, not clue count: Beginner, Easy, Medium, Hard, Expert, Master. A human-style logical solver (singles → pairs/triples → wings, fish, unique rectangles → chains) grades every puzzle, and each puzzle has exactly one solution.
 - **Earned unlocks:** only Beginner is open at first. Higher tiers need completions, clean solves and passed qualifications (no hints, at most one mistake).
 - **Event-driven arcade score** ([docs/formula-score-00.md](docs/formula-score-00.md)): every correct digit scores, completed rows/columns/blocks pay bonuses (with double and triple clears), and quick runs of placements build Time, Number, Line, Block and Hybrid chains inside a per-difficulty time window. Completion and time bonuses land at the end; mistakes, hints, assists and mode multiply the total. XP raises your level. Bronze → Diamond mastery ranks per tier. Replaying a puzzle earns no progression credit.
+- **Arcade feedback** ([docs/effect-00.md](docs/effect-00.md)): light sweeps for cleared rows, columns and blocks, escalating chain celebrations (Chain → Great → Super → Mega → Legendary) coloured by chain type, one combined title per move with the exact amounts, synthesized sounds, and a celebratory result screen. Separate switches for visual effects, sound effects, chain sounds and celebrations, plus a volume slider. Respects reduced motion.
 - **Modes:** Classic, Qualification, Daily Challenge (the same puzzle for everyone), Time Attack, Zen and Practice (starts the board right where a chosen technique is needed).
 - **Hints that explain:** each hint names the technique, highlights the cells and explains the deduction. Apply places the digit or crosses out candidates.
 - **Statistics:** per-tier records, solve-time trend with an improvement note, techniques met, full attempt history. About 47 achievements, some hidden.
@@ -34,6 +35,9 @@ bun run bank       # regenerate the puzzle bank (src/core/puzzles.ts)
   - `scoring.ts`: scoring engine and all balancing values (`RULES`, versioned). Consumes events, never touches the board.
   - `chains.ts`: chain detector. Reports which chain patterns each eligible placement completes; knows nothing about points.
   - `progress.ts`: tiers, XP, mastery, unlocks, achievements. All stats are derived from the attempt history.
+- `src/effects/`: visual and audio feedback, driven only by gameplay events.
+  - `moment.ts`: groups one move's events into one celebration (dominant title, summary, sound). Pure and tested.
+  - `visuals.ts`: overlay effects (Web Animations API), `audio.ts`: synthesized sounds (Web Audio), `index.ts`: the controller.
 - `src/ui/`: the interface.
   - `state.ts`: settings, profile, the game in progress and storage.
   - `gameplay-events.ts`: the event bus. Moves become events here; scoring and listeners (`onGameEvent`) react.

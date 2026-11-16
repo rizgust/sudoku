@@ -38,7 +38,8 @@ export type GameEvent =
   | { type: 'CHAIN_CLOSED'; run: number; reason: ChainCloseReason }
   /** Older saved games used this before chains had ids. */
   | { type: 'CHAIN_BROKEN' }
-  | { type: 'MISTAKE' }
+  /** A wrong digit was confirmed. `cell` is for feedback only; scoring ignores it. */
+  | { type: 'MISTAKE'; cell?: number }
   | { type: 'HINT_USED' }
   | { type: 'ASSIST_ENABLED' }
   /** `elapsed` is game time in seconds. */
@@ -46,10 +47,24 @@ export type GameEvent =
 
 export type GameEventType = GameEvent['type'];
 
+/**
+ * What a finished attempt achieved, announced once the result is saved (result screen
+ * celebrations). Computed by the game from the saved history, never by the effects layer.
+ */
+export type ProgressEvent =
+  | { type: 'PUZZLE_RESULT'; total: number; won: boolean }
+  | { type: 'CLEAN_COMPLETION' }
+  | { type: 'PERSONAL_BEST'; previous: number; score: number }
+  | { type: 'DIFFICULTY_UNLOCKED'; tier: number; name: string }
+  | { type: 'MASTERY_RANK_UP'; tier: number; rank: string }
+  | { type: 'ACHIEVEMENT_UNLOCKED'; id: string; name: string };
+
 /** Points the scoring engine awarded for one event, for pop-ups and effects. */
 export interface Award {
   kind: 'place' | 'region' | 'multi' | 'chain';
   pts: number;
   /** Empty for plain placements. */
   label: string;
+  /** For region awards: which region. */
+  region?: RegionKey;
 }

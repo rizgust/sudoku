@@ -19,8 +19,15 @@ export interface Settings {
   advancedAssists: boolean;
   vibrate: boolean;
   theme: 'auto' | 'light' | 'dark';
+  /** Visual effects: pop-ups, sweeps, particles, banners and celebrations. */
   scoreFx: boolean;
   chainHud: boolean;
+  /** Master volume, 0–100. */
+  volume: number;
+  /** Input and reward sounds (placements, mistakes, region clears). */
+  sfx: boolean;
+  chainSfx: boolean;
+  celebrationSfx: boolean;
   levelsOpen?: boolean;
 }
 
@@ -86,7 +93,7 @@ export const store = {
 };
 
 export const settings: Settings = Object.assign(
-  { highlightMistakes: true, highlightSame: true, autoRemoveNotes: true, advancedAssists: false, vibrate: true, theme: 'auto', scoreFx: true, chainHud: true } satisfies Settings,
+  { highlightMistakes: true, highlightSame: true, autoRemoveNotes: true, advancedAssists: false, vibrate: true, theme: 'auto', scoreFx: true, chainHud: true, volume: 60, sfx: true, chainSfx: true, celebrationSfx: true } satisfies Settings,
   store.get<Partial<Settings>>(KEYS.settings, {}),
 );
 

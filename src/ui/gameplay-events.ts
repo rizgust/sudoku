@@ -3,7 +3,7 @@
    placements, and anything else (score pop-ups now, the effects system later) subscribes. */
 import { BOX, BOXES, COL, COLS, ROW, ROWS } from '../core/sudoku.ts';
 import * as Chains from '../game/chains.ts';
-import type { Award, ChainCloseReason, GameEvent, RegionKey } from '../game/events.ts';
+import type { Award, ChainCloseReason, GameEvent, ProgressEvent, RegionKey } from '../game/events.ts';
 import * as Scoring from '../game/scoring.ts';
 import { saveGame, type Game } from './state.ts';
 
@@ -21,6 +21,19 @@ export function record(game: Game, ev: GameEvent): void {
   game.events.push(ev);
   const awards = Scoring.apply(game.score, ev);
   for (const fn of listeners) fn(ev, awards, game);
+}
+
+export type ProgressListener = (events: ProgressEvent[]) => void;
+const progressListeners = new Set<ProgressListener>();
+
+/** Subscribes to what a finished attempt achieved (sent when the result screen opens). */
+export function onProgress(fn: ProgressListener): () => void {
+  progressListeners.add(fn);
+  return () => progressListeners.delete(fn);
+}
+
+export function emitProgress(events: ProgressEvent[]): void {
+  for (const fn of progressListeners) fn(events);
 }
 
 /** Adds scoring state to a game. Games saved before event scoring start with what's on the board. */

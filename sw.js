@@ -1,7 +1,7 @@
 // Offline support.
 // Online: always fetch the latest version (so new deploys show up right away) and refresh the cache.
 // Offline or very slow network: fall back to the cached copy.
-const CACHE = 'sudoku-v4';
+const CACHE = 'sudoku-v5';
 const NETWORK_TIMEOUT_MS = 3000;
 const ASSETS = [
   './',
@@ -10,6 +10,8 @@ const ASSETS = [
   './app.js',
   './sudoku.js',
   './puzzles.js',
+  './scoring.js',
+  './chains.js',
   './progress.js',
   './manifest.webmanifest',
   './icons/icon.svg',

@@ -5,14 +5,17 @@ const Progress = (() => {
 
   // ---------- Tiers ----------
 
+  const SCORE_RULES = (typeof Scoring !== 'undefined' ? Scoring : require('./scoring.js')).RULES;
+
+  // Par times live in the scoring rules (SCORE_RULES.par) so balancing stays in one place.
   const TIERS = [
-    { id: 1, key: 'beginner', name: 'Beginner', base: 100,  par: 300,  blurb: 'Scanning and singles' },
-    { id: 2, key: 'easy',     name: 'Easy',     base: 250,  par: 480,  blurb: 'Singles and candidate elimination' },
-    { id: 3, key: 'medium',   name: 'Medium',   base: 500,  par: 720,  blurb: 'Locked candidates and pairs' },
-    { id: 4, key: 'hard',     name: 'Hard',     base: 1000, par: 1080, blurb: 'Triples, wings and multi-step logic' },
-    { id: 5, key: 'expert',   name: 'Expert',   base: 2000, par: 1500, blurb: 'X-Wing, Swordfish and complex subsets' },
-    { id: 6, key: 'master',   name: 'Master',   base: 4000, par: 2100, blurb: 'Chains and advanced fish' },
-  ];
+    { id: 1, key: 'beginner', name: 'Beginner', blurb: 'Scanning and singles' },
+    { id: 2, key: 'easy',     name: 'Easy',     blurb: 'Singles and candidate elimination' },
+    { id: 3, key: 'medium',   name: 'Medium',   blurb: 'Locked candidates and pairs' },
+    { id: 4, key: 'hard',     name: 'Hard',     blurb: 'Triples, wings and multi-step logic' },
+    { id: 5, key: 'expert',   name: 'Expert',   blurb: 'X-Wing, Swordfish and complex subsets' },
+    { id: 6, key: 'master',   name: 'Master',   blurb: 'Chains and advanced fish' },
+  ].map((t) => ({ ...t, par: SCORE_RULES.par[t.id] }));
   const tier = (id) => TIERS[id - 1];
 
   // Requirements to unlock tier id (completed in the tier below).
@@ -41,26 +44,12 @@ const Progress = (() => {
     practice:{ name: 'Practice',        progression: false, scoreMul: 0 },
   };
 
-  // ---------- Scoring ----------
+  // ---------- XP ----------
+  // The score itself comes from the event-driven engine in scoring.js.
 
-  /** Score = max(0, (B + T) × A × H × S), with zen/practice multipliers on top. */
-  function score({ tierId, elapsed, mistakes, hints, assisted, mode }) {
-    const t = tier(tierId);
-    const B = t.base;
-    // Full time bonus at half of par or faster, none at twice par or slower.
-    const frac = Math.min(1, Math.max(0, (2 * t.par - elapsed) / (1.5 * t.par)));
-    const T = Math.round(0.5 * B * frac);
-    const A = Math.max(0, 1 - 0.1 * mistakes);
-    const H = Math.max(0, 1 - 0.2 * hints);
-    const S = assisted ? 0.8 : 1;
-    const M = MODES[mode]?.scoreMul ?? 1;
-    const total = Math.max(0, Math.round((B + T) * A * H * S * M));
-    return { B, T, A, H, S, M, total };
-  }
-
-  /** XP for a completion. Replays of an already-solved puzzle earn a quarter. */
+  /** XP = 10 + floor(score / 100) (§17.1). Replays of an already-solved puzzle earn a quarter. */
   function xpFor({ total, mode, replay, qualPassed }) {
-    let xp = mode === 'practice' ? 15 : 10 + Math.round(total / 10);
+    let xp = mode === 'practice' ? 15 : 10 + Math.floor(total / 100);
     if (mode === 'daily' && !replay) xp += 50;
     if (qualPassed) xp += 100;
     if (replay) xp = Math.round(xp * 0.25);
@@ -337,7 +326,7 @@ const Progress = (() => {
 
   return {
     TIERS, tier, UNLOCK, RANKS, MODES, ACHIEVEMENTS,
-    score, xpFor, levelInfo, summarize, awardAchievements, dailyInfo, dayKey, isClean,
+    xpFor, levelInfo, summarize, awardAchievements, dailyInfo, dayKey, isClean,
   };
 })();
 

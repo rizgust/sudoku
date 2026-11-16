@@ -1196,3 +1196,56 @@ dialog::backdrop { background: rgba(18, 26, 28, .45); backdrop-filter: blur(3px)
 .ach .bar i { background: var(--ic); }
 
 .toast { border-radius: 16px; font-weight: 700; }
+
+/* Score feed: labelled points float up over the top of the board. Never takes input. */
+.score-feed {
+  position: absolute;
+  left: 0; right: 0; top: 10px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  pointer-events: none;
+  z-index: 3;
+}
+.feed-item {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--ok);
+  font-size: .8rem;
+  font-weight: 800;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+  animation: feed-up 1.4s ease-out forwards;
+}
+.feed-item.chain { color: var(--accent); }
+.feed-item.multi { color: var(--accent); }
+@keyframes feed-up {
+  0% { opacity: 0; transform: translateY(6px); }
+  15% { opacity: 1; transform: translateY(0); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-14px); }
+}
+
+/* Chain indicator: one slim line in the gap under the board, so the board never moves. */
+.chain-hud {
+  position: absolute;
+  left: 0; right: 0; top: calc(100% + 2px);
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font-size: .64rem;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--accent);
+  pointer-events: none;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.chain-hud[hidden] { display: none; }
+.chain-hud i { display: block; width: 40%; height: 2px; border-radius: 2px; background: color-mix(in srgb, var(--accent) 20%, transparent); overflow: hidden; }
+.chain-hud b { display: block; height: 100%; background: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .feed-item { animation-name: feed-fade; }
+  @keyframes feed-fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+  .score-pop.show { animation-duration: .01s; }
+}

@@ -125,6 +125,8 @@
         </div>
         <div class="board-box">
           <div class="board" id="board" role="grid" aria-label="Sudoku board"></div>
+          <div class="score-feed" id="score-feed" aria-hidden="true"></div>
+          <div class="chain-hud" id="chain-hud" role="status" aria-live="off" hidden><span id="chain-text"></span><i><b id="chain-bar"></b></i></div>
           <div class="pause-overlay" id="pause-overlay" hidden>
             <button class="btn primary big" id="btn-resume" type="button">Resume</button>
           </div>
@@ -248,6 +250,14 @@
         <span>Advanced assists<small>Adds Auto notes. Using it scores ×0.8 and isn’t allowed in qualifications</small></span>
         <input type="checkbox" data-setting="advancedAssists">
       </label>
+      <label class="setting">
+        <span>Score animations<small>Pop-ups for points, region clears and chains</small></span>
+        <input type="checkbox" data-setting="scoreFx">
+      </label>
+      <label class="setting">
+        <span>Chain indicator<small>Show the active chain, its multiplier and time left under the board</small></span>
+        <input type="checkbox" data-setting="chainHud">
+      </label>
       <label class="setting" id="setting-vibrate">
         <span>Vibration<small>Buzz on mistakes and long-press</small></span>
         <input type="checkbox" data-setting="vibrate">
@@ -302,6 +312,8 @@
 
   <script src="sudoku.js"></script>
   <script src="puzzles.js"></script>
+  <script src="scoring.js"></script>
+  <script src="chains.js"></script>
   <script src="progress.js"></script>
   <script src="app.js"></script>
 </body>

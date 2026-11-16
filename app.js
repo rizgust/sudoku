@@ -33,7 +33,7 @@
   };
 
   const settings = Object.assign(
-    { highlightMistakes: true, highlightSame: true, autoRemoveNotes: true, advancedAssists: false, vibrate: true, theme: 'auto' },
+    { highlightMistakes: true, highlightSame: true, autoRemoveNotes: true, advancedAssists: false, vibrate: true, theme: 'auto', scoreFx: true, chainHud: true },
     store.get(KEYS.settings, {})
   );
   const profile = Object.assign(
@@ -318,6 +318,9 @@
       history: [],
       completed: false,
     };
+    initScoring(game);
+    feedEl.textContent = '';
+    tickAt = performance.now();
     setPaused(false);
     saveGame();
     render();
@@ -325,6 +328,111 @@
   }
 
   const canPlay = () => view === 'game' && inProgress() && !paused && !loading;
+
+  // ---------- Scoring events ----------
+  // The game validates moves and emits events; Scoring turns them into points and never
+  // touches the board. Chains (the detector) only sees eligible placements.
+
+  /** Adds scoring state to a game. Games saved before event scoring start with what's on the board. */
+  function initScoring(g) {
+    if (g.score && g.chain && g.credited) return;
+    g.score = Scoring.create({ tier: g.tier, mode: g.mode });
+    g.chain = Chains.create();
+    g.credited = new Array(81).fill(0);
+    g.events = [];
+    g.seq = 0;
+    for (let i = 0; i < 81; i++) {
+      if (!g.puzzle[i] && g.values[i] && g.values[i] === g.solution[i]) {
+        g.credited[i] = 1;
+        Scoring.apply(g.score, { type: 'CELL_REVEALED', cell: i });
+      }
+    }
+    for (let k = 0; k < (g.mistakes || 0); k++) Scoring.apply(g.score, { type: 'MISTAKE' });
+    for (let k = 0; k < (g.hints || 0); k++) Scoring.apply(g.score, { type: 'HINT_USED' });
+    if (g.assisted) Scoring.apply(g.score, { type: 'ASSIST_ENABLED' });
+  }
+
+  function record(ev) {
+    game.events.push(ev);
+    const awards = Scoring.apply(game.score, ev);
+    if (awards.length) showAwards(awards);
+  }
+
+  // Game clock in ms with pauses excluded: whole seconds from the ticker plus the time since
+  // the last tick, so chain windows freeze while paused.
+  let tickAt = performance.now();
+  const clockMs = () => game.elapsed * 1000 + Math.min(999, Math.max(0, performance.now() - tickAt));
+
+  function breakChain() {
+    if (!game.chain.recent.length && !game.score.chain) return;
+    Chains.reset(game.chain);
+    record({ type: 'CHAIN_BROKEN' });
+  }
+
+  function completedRegions(i) {
+    const done = (unit) => unit.every((k) => game.values[k] === game.solution[k]);
+    const keys = [];
+    if (done(ROWS[ROW[i]])) keys.push(`r${ROW[i]}`);
+    if (done(COLS[COL[i]])) keys.push(`c${COL[i]}`);
+    if (done(BOXES[BOX[i]])) keys.push(`b${BOX[i]}`);
+    return keys;
+  }
+
+  /**
+   * A correct digit landed in cell i. Only the first correct fill by the player earns
+   * placement points and feeds chains; re-entries after undo/erase and hint placements don't.
+   */
+  function onCorrect(i, d, { hinted = false } = {}) {
+    const fresh = !game.credited[i];
+    game.credited[i] = 1;
+    let id = null;
+    if (hinted) {
+      record({ type: 'CELL_REVEALED', cell: i });
+      breakChain();
+    } else if (fresh) {
+      id = ++game.seq;
+      // No technique attribution yet, so the placement earns the default reward.
+      record({ type: 'NUMBER_PLACED', id, cell: i, digit: d, technique: null });
+    }
+    const regions = completedRegions(i);
+    if (regions.length) record({ type: 'REGION_COMPLETED', regions });
+    if (id != null && Scoring.chainsEnabled(game.mode)) {
+      const p = { id, cell: i, digit: d, row: ROW[i], col: COL[i], block: BOX[i], t: Math.round(clockMs()) };
+      const r = Chains.observe(game.chain, p, { windowMs: Scoring.chainWindowMs(game.tier), min: Scoring.RULES.chainMin });
+      if (r) record({ type: 'CHAIN_EXTENDED', placementId: id, ...r });
+    }
+  }
+
+  // ---------- Score feedback ----------
+
+  const feedEl = $('#score-feed');
+  function showAwards(awards) {
+    if (!settings.scoreFx || view !== 'game') return;
+    for (const a of awards) {
+      if (!a.label) continue; // plain placements show in the +N next to the score
+      const el = document.createElement('div');
+      el.className = `feed-item ${a.kind}`;
+      el.textContent = `+${fmt(a.pts)} ${a.label}`;
+      el.addEventListener('animationend', () => el.remove());
+      feedEl.appendChild(el);
+      while (feedEl.children.length > 4) feedEl.firstChild.remove();
+    }
+  }
+
+  let chainTimer = null;
+  function renderChain() {
+    const hud = $('#chain-hud');
+    const c = game && game.score && game.score.chain;
+    const win = game ? Scoring.chainWindowMs(game.tier) : 0;
+    const left = c ? win - (clockMs() - c.firstT) : 0;
+    const show = !!c && settings.chainHud && inProgress() && left > 0 && Scoring.chainsEnabled(game.mode);
+    hud.hidden = !show;
+    if (!show) { clearInterval(chainTimer); chainTimer = null; return; }
+    const next = Scoring.nextChainGain(game.score);
+    $('#chain-text').textContent = `${c.label} · ${c.length} placements · ${(left / 1000).toFixed(1)}s${next ? ` · next +${fmt(next)}` : ''}`;
+    $('#chain-bar').style.width = pct(left / win);
+    if (!chainTimer) chainTimer = setInterval(() => { if (!paused) renderChain(); }, 100);
+  }
 
   function snapshot() {
     game.history.push({ v: game.values.slice(), n: game.notes.slice() });
@@ -379,6 +487,8 @@
 
     if (d !== game.solution[i]) {
       game.mistakes++;
+      Chains.reset(game.chain);
+      record({ type: 'MISTAKE' });
       retrigger(cells[i].el, 'shake');
       buzz([35, 50, 35]);
       if (game.mode === 'qual' && game.mistakes > 1) {
@@ -387,6 +497,7 @@
         return;
       }
     } else {
+      onCorrect(i, d);
       retrigger(cells[i].el, 'pop');
       flashCompletedUnits(i);
     }
@@ -400,6 +511,8 @@
     if (game.puzzle[i] || (!game.values[i] && !game.notes[i])) return;
     hideHint();
     snapshot();
+    // Clearing a credited digit interrupts the chain; clearing a wrong one or notes doesn't.
+    if (game.values[i] && game.values[i] === game.solution[i]) breakChain();
     game.values[i] = 0;
     game.notes[i] = 0;
     commit();
@@ -409,6 +522,9 @@
     if (!canPlay() || !game.history.length) return;
     hideHint();
     const s = game.history.pop();
+    // Undo that changes the confirmed board ends the chain. Mistakes, hints and credited
+    // cells and regions stay recorded, so undo/redo can't farm points.
+    if (s.v.some((v, k) => v !== game.values[k])) breakChain();
     game.values = s.v;
     game.notes = s.n;
     commit();
@@ -429,6 +545,7 @@
     if (!canPlay() || !assistsAllowed()) return;
     hideHint();
     snapshot();
+    if (!game.assisted) record({ type: 'ASSIST_ENABLED' });
     game.assisted = true;
     for (let i = 0; i < 81; i++) game.notes[i] = game.values[i] ? 0 : candidatesFor(i);
     commit();
@@ -497,6 +614,14 @@
       }
     }
     game.hints++;
+    record({ type: 'HINT_USED' });
+    breakChain();
+    // A hinted answer can't earn placement points, even if the player types it in.
+    const answer = h.kind === 'reveal' ? h.cell : h.kind === 'step' && h.step.place ? h.step.place[0] : null;
+    if (answer != null && !game.credited[answer]) {
+      game.credited[answer] = 1;
+      record({ type: 'CELL_REVEALED', cell: answer });
+    }
     hintState = h;
     $('#hint-title').textContent = h.title;
     $('#hint-text').textContent = h.text;
@@ -521,6 +646,7 @@
       game.notes[i] = 0;
       if (settings.autoRemoveNotes) clearPeerNotes(i, d);
       selected = i;
+      onCorrect(i, d, { hinted: true });
       retrigger(cells[i].el, 'pop');
       flashCompletedUnits(i);
       checkWin();
@@ -563,7 +689,10 @@
     const t = Progress.tier(game.tier);
     const end = Date.now();
     const won = res === 'won';
-    const sc = won ? Progress.score({ tierId: game.tier, elapsed: game.elapsed, mistakes: game.mistakes, hints: game.hints, assisted: game.assisted, mode: game.mode }) : null;
+    Chains.reset(game.chain);
+    if (won) record({ type: 'PUZZLE_COMPLETED', elapsed: game.elapsed });
+    const sc = won ? game.score.final : null;
+    const st = game.score.stats;
     const replay = profile.history.some((a) => a.pid === game.pid && a.res === 'won');
     const qualPassed = game.mode === 'qual' && won && game.mistakes <= 1 && game.hints === 0 && !game.assisted;
     const xp = won ? Progress.xpFor({ total: sc.total, mode: game.mode, replay, qualPassed }) : 0;
@@ -576,7 +705,19 @@
       sc: sc ? sc.total : 0, xp, up: won && game.elapsed <= t.par, qp: qualPassed,
       tech: won ? game.techs : '',
     };
-    if (sc) Object.assign(rec, { B: sc.B, T: sc.T, A: sc.A, H: sc.H, S: sc.S });
+    // Breakdown, rules version and arcade stats, so results stay explainable after rule changes.
+    if (sc) {
+      Object.assign(rec, {
+        sv: sc.v, A: sc.A, H: sc.H, S: sc.S,
+        sb: { pl: sc.placement, rg: sc.region, mc: sc.multi, ch: sc.chain, che: sc.chainEarned, cb: sc.completion, tb: sc.time },
+      });
+    }
+    if (game.mode !== 'practice') {
+      rec.ar = {
+        rows: st.rows, cols: st.cols, blocks: st.blocks, dbl: st.double, tpl: st.triple,
+        chains: st.chains, ...st.byType, longest: st.longest, best: st.bestChain,
+      };
+    }
     profile.history.push(rec);
     if (won && game.mode === 'practice' && game.tech) profile.practiced[game.tech] = end;
     const newAch = won ? Progress.awardAchievements(profile, end) : [];
@@ -625,13 +766,19 @@
     $('#result-breakdown').hidden = !showScore;
     if (showScore) {
       $('#result-score').innerHTML = `${fmt(sc.total)}<small> pts</small>`;
+      const chainNote = sc.chain < sc.chainEarned ? ` <small class="muted">(${fmt(sc.chainEarned)} earned, capped at 35%)</small>` : '';
       const rows = [
-        ['Base', fmt(sc.B)],
-        ['Time bonus', `+${fmt(sc.T)}`],
+        ['Placements', fmt(sc.placement)],
+        ['Regions', `+${fmt(sc.region)}`],
+        ['Multi-clears', `+${fmt(sc.multi)}`],
+        ['Chains', `+${fmt(sc.chain)}${chainNote}`],
+        ['Completion', `+${fmt(sc.completion)}`],
+        ['Time bonus', `+${fmt(sc.time)}`],
         ['Accuracy', `×${sc.A.toFixed(2)}`],
         ['Hints', `×${sc.H.toFixed(2)}`],
         ['Assists', `×${sc.S.toFixed(2)}`],
       ];
+      if (rec.mode === 'zen') rows.splice(3, 1); // chains are off in Zen
       if (sc.M !== 1) rows.push([mode.name, `×${sc.M.toFixed(2)}`]);
       $('#result-breakdown').innerHTML = rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
     }
@@ -679,6 +826,7 @@
   }
 
   function setPaused(p) {
+    if (paused && !p) tickAt = performance.now();
     paused = !!p && inProgress();
     boardEl.classList.toggle('paused', paused || loading);
     $('#pause-overlay').hidden = !paused;
@@ -703,27 +851,13 @@
     }
   }
 
-  // Live score grows with every correct digit on the board: the puzzle's score (before the
-  // time bonus) times the share of empty cells solved so far. Mistakes and hints lower it
-  // right away; the time bonus is added on completion, so the final matches the formula.
+  // Live score: placement, region, multi-clear and (uncapped) chain points earned so far,
+  // with current penalties applied. Completion and time bonuses arrive on completion (§16.1).
   let lastScore = { pid: null, value: 0 };
   function renderScore() {
-    if (!game || game.mode === 'practice') return;
-    const args = { tierId: game.tier, mistakes: game.mistakes, hints: game.hints, assisted: game.assisted, mode: game.mode };
-    let value;
-    if (game.completed && game.result === 'won') {
-      value = Progress.score({ ...args, elapsed: game.elapsed }).total;
-    } else {
-      const noTime = Progress.score({ ...args, elapsed: Infinity }).total;
-      let open = 0, solved = 0;
-      for (let i = 0; i < 81; i++) {
-        if (game.puzzle[i]) continue;
-        open++;
-        if (game.values[i] === game.solution[i]) solved++;
-      }
-      value = open ? Math.round((noTime * solved) / open) : noTime;
-    }
-    if (lastScore.pid === game.pid && value > lastScore.value) {
+    if (!game || game.mode === 'practice' || !game.score) return;
+    const value = Scoring.live(game.score);
+    if (settings.scoreFx && lastScore.pid === game.pid && value > lastScore.value) {
       const pop = $('#score-pop');
       pop.textContent = `+${fmt(value - lastScore.value)}`;
       retrigger(pop, 'show');
@@ -829,6 +963,7 @@
     }
     renderTimer();
     renderScore();
+    renderChain();
   }
 
   // ---------- Home ----------
@@ -1049,6 +1184,8 @@
         </table>
       </div>
 
+      ${arcadeStats(rows)}
+
       <h2 class="section-title">Techniques met</h2>
       <div class="card">
         ${techList.length ? `<table class="kv">${techList.map(([k, n]) => `<tr><td>${TECHNIQUES[k].name} <small class="muted">${tierName(Math.max(1, TECHNIQUES[k].level))}</small></td><td>${n} puzzle${n === 1 ? '' : 's'}</td></tr>`).join('')}</table>` : '<p class="muted small">Solved puzzles list the techniques they needed here.</p>'}
@@ -1068,6 +1205,27 @@
         </table>` : '<p class="muted small">No games yet.</p>'}
       </div>
     `;
+  }
+
+  /** Region and chain totals from attempts scored by the event engine (they carry `ar`). */
+  function arcadeStats(rows) {
+    const list = rows.filter((a) => a.ar);
+    if (!list.length) return '';
+    const sum = (k) => list.reduce((x, a) => x + (a.ar[k] || 0), 0);
+    const max = (k) => Math.max(0, ...list.map((a) => a.ar[k] || 0));
+    const chainTotal = list.reduce((x, a) => x + (a.sb ? a.sb.ch : 0), 0);
+    const kv = {
+      'Rows · columns · blocks': `${fmt(sum('rows'))} · ${fmt(sum('cols'))} · ${fmt(sum('blocks'))}`,
+      'Double · triple clears': `${fmt(sum('dbl'))} · ${fmt(sum('tpl'))}`,
+      Chains: fmt(sum('chains')),
+      'Time · number · line · block': `${fmt(sum('time'))} · ${fmt(sum('number'))} · ${fmt(sum('line'))} · ${fmt(sum('block'))}`,
+      'Hybrid chains': fmt(sum('hybrid')),
+      'Longest chain': max('longest') ? `${max('longest')} placements` : '–',
+      'Best single chain': max('best') ? fmt(max('best')) : '–',
+      'Chain points (after cap)': fmt(chainTotal),
+    };
+    return `<h2 class="section-title">Clears and chains</h2>
+      <div class="card"><table class="kv">${Object.entries(kv).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table></div>`;
   }
 
   function trendChart(series, par) {
@@ -1306,6 +1464,7 @@
       if (view !== 'game' || !inProgress() || paused || loading || document.hidden) return;
       if (document.querySelector('dialog[open]')) return;
       game.elapsed++;
+      tickAt = performance.now();
       renderTimer();
       if (game.mode === 'time' && game.elapsed >= Progress.tier(game.tier).par) {
         finish('failed', { reason: 'time' });
@@ -1332,6 +1491,7 @@
   const saved = store.get(KEYS.game, null);
   if (isValidGame(saved) && !saved.completed) {
     game = Object.assign({ mistakes: 0, hints: 0, elapsed: 0, history: [], completed: false, moved: true, start: Date.now() }, saved);
+    initScoring(game);
     setPaused(false);
   }
   refresh();

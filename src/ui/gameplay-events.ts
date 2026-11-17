@@ -58,7 +58,7 @@ export function initScoring(g: Game): void {
 
 // ---------- Game clock ----------
 // Game time in ms with pauses excluded: whole seconds from the ticker plus the time since the
-// last tick, so chain windows freeze while paused.
+// last tick, so the chain's inactivity timer freezes while paused.
 
 let tickAt = performance.now();
 /** Call on each 1 s tick and when play (re)starts. */
@@ -75,7 +75,7 @@ export function breakChain(game: Game, reason: ChainCloseReason): void {
   if (closed) record(game, { type: 'CHAIN_CLOSED', run: closed.run, reason });
 }
 
-/** Closes an open chain once its window has passed, even if no placement follows. */
+/** Closes an open chain once its inactivity timer runs out, even if no placement follows. */
 export function expireChain(game: Game | null): void {
   if (!game || !game.chain || !game.chain.active) return;
   const closed = Chains.expire(game.chain, Math.round(clockMs(game)), chainOpts(game));
@@ -115,6 +115,6 @@ export function onCorrect(game: Game, i: number, d: number, { hinted = false } =
     const p = { id, cell: i, digit: d, row: ROW[i], col: COL[i], block: BOX[i], t: Math.round(clockMs(game)) };
     const { closed, chain } = Chains.observe(game.chain, p, chainOpts(game));
     if (closed) record(game, { type: 'CHAIN_CLOSED', run: closed.run, reason: 'expired' });
-    if (chain) record(game, { type: 'CHAIN_EXTENDED', placementId: id, ...chain });
+    if (chain) record(game, { type: 'CHAIN_EXTENDED', placementId: id, ...chain, t: p.t });
   }
 }

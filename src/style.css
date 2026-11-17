@@ -1243,10 +1243,26 @@ dialog::backdrop { background: rgba(18, 26, 28, .45); backdrop-filter: blur(3px)
 .chain-hud.low { color: #c9852b; }
 .chain-hud.critical .chain-ring { animation: chain-pulse .6s ease-in-out infinite alternate; }
 @keyframes chain-pulse { to { transform: rotate(-90deg) scale(1.2); } }
+/* Secondary notice: the bonus pattern riding on the chain, in its type's accent. */
+.chain-bonus {
+  --c: var(--fx-cyan, currentColor);
+  padding: 1px 5px; border-radius: 6px;
+  font-size: .58rem; letter-spacing: .04em;
+  color: var(--c);
+  background: color-mix(in srgb, var(--c) 14%, transparent);
+}
+.chain-bonus[hidden] { display: none; }
+.chain-bonus[data-type="number"] { --c: var(--fx-blue); }
+.chain-bonus[data-type="block"] { --c: var(--fx-emerald); }
+.chain-bonus[data-type="row"], .chain-bonus[data-type="col"] { --c: var(--fx-amber); }
+.chain-bonus[data-type="hybrid"] { --c: var(--fx-gold); }
+.chain-bonus.pattern-in { animation: pattern-in .35s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes pattern-in { from { opacity: 0; transform: translateY(3px) scale(.85); } }
 
 @media (prefers-reduced-motion: reduce) {
   .score-pop.show { animation-duration: .01s; }
   .chain-hud.critical .chain-ring { animation: none; }
+  .chain-bonus.pattern-in { animation: none; }
   .chain-ring .arc { transition: none; }
 }
 

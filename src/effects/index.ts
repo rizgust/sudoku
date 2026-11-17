@@ -103,6 +103,8 @@ function playVisuals(m: Moment, p: Plan, game: Game): void {
     fx.ring(cell, accent, c.level);
     fx.particles([cell], c.level >= 3 ? 'gold' : accent, Math.round([0, 6, 8, 10, 14, 20][c.level] * scale), 1 + c.level * 0.12);
     signature(c.type, c.hybrid, cell, m.digit, game, accent);
+    // A pattern activating gets an extra burst on top of the chain step.
+    if (c.pattern) fx.burst([cell], accent, 1.2, 550);
     if (c.level >= 2) fx.hudFlash('surge');
     if (c.level >= 4) fx.hudGlow(true);
   }

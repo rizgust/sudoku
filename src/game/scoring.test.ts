@@ -17,14 +17,14 @@ function play(s: ScoreState, cs: ChainState, list: Placement[], windowMs: number
     Scoring.apply(s, { type: 'NUMBER_PLACED', id: p.id, cell: p.cell, digit: p.digit });
     const { closed, chain } = Chains.observe(cs, p, { windowMs, min: 3 });
     if (closed) Scoring.apply(s, { type: 'CHAIN_CLOSED', run: closed.run, reason: 'expired' });
-    out.push(chain ? Scoring.apply(s, { type: 'CHAIN_EXTENDED', ...chain }) : []);
+    out.push(chain ? Scoring.apply(s, { type: 'CHAIN_EXTENDED', ...chain, t: p.t }) : []);
   }
   return out;
 }
 const close = (s: ScoreState, cs: ChainState) => { const c = Chains.reset(cs); if (c) Scoring.apply(s, { type: 'CHAIN_CLOSED', run: c.run, reason: 'end' }); };
 
-test('§11.5 chain bonus example: Hard, 4 block placements of 100 → 640', () => {
-  assert.strictEqual(Scoring.chainValue(400, 4, 'block', 4), 640);
+test('§11.5 Universal Chain example: Hard, 4 placements of 100 → 400', () => {
+  assert.strictEqual(Scoring.chainValue(400, 4, 4), 400);
 });
 
 test('§8.2 row + block placement pays 300 + 500 + 200 double clear', () => {
@@ -57,65 +57,67 @@ test('§14 time bonus: max at half par, zero at twice par, linear between', () =
   assert.strictEqual(Scoring.timeBonus(4, 1080), 3333);
 });
 
-test('§10.1 Hard block chain within 13 s pays incrementally (3 → 4 placements)', () => {
+test('§10.1 Hard chain pays incrementally; Block + Line activating together pays the Hybrid bonus once', () => {
   const s = Scoring.create({ tier: 4, mode: 'classic' });
   const cs = Chains.create();
-  // Cells 0, 1, 2 share row 0 and block 0 → Time + Line + Block = Hybrid. Cell 9 is block 0 only.
+  // Cells 0, 1, 2 share row 0 and block 0 → Block + Line = Hybrid. Cell 9 is block 0 only.
   const awards = play(s, cs, [place(1, 0, 1, 0), place(2, 1, 2, 4000), place(3, 2, 3, 9000), place(4, 9, 4, 13000)], 15000);
   assert.deepStrictEqual(awards[0], []);
   assert.deepStrictEqual(awards[1], []);
-  // 3 × 50 = 150 × (1.3 × 1.2 − 1) × 2.0 = 168, Hybrid +20% = 33 → 201
-  assert.strictEqual(awards[2][0].pts, 201);
-  // 4 × 50 = 200 × (1.5 × 1.2 − 1) × 2.0 = 320, no longer Hybrid → pays 320 − 201
-  assert.strictEqual(awards[3][0].pts, 119);
-  assert.strictEqual(s.chainEarned, 320);
+  // Universal: 150 × (1.3 − 1) × 2.0 = 90; Hybrid +30% of 90 = 27 (Block and Line don't also pay)
+  assert.deepStrictEqual(awards[2].map((a) => [a.kind, a.pts, a.label]), [['chain', 90, 'Chain ×1.3!'], ['pattern', 27, 'Hybrid Bonus']]);
+  // Universal: 200 × (1.5 − 1) × 2.0 = 200 → pays 200 − 90; the Block pattern extends but doesn't pay again
+  assert.deepStrictEqual(awards[3].map((a) => [a.kind, a.pts]), [['chain', 110]]);
+  assert.strictEqual(s.chainEarned, 227);
   assert.strictEqual(s.chain?.length, 4);
 });
 
-test('an open chain closes when its window passes; its placements are not paid again', () => {
+test('a chain ends when its inactivity timer runs out; its placements are not paid again', () => {
   const s = Scoring.create({ tier: 4, mode: 'classic' });
   const cs = Chains.create();
   const awards = play(s, cs, [
     place(1, 0, 1, 0), place(2, 1, 2, 4000), place(3, 2, 3, 9000), place(4, 9, 4, 13000),
-    place(5, 10, 5, 20000), // past 0 + 15 s: chain 1 closes, this placement starts forming chain 2
+    place(5, 10, 5, 28001), // 15.001 s after the latest placement: chain 1 ends, this one starts forming chain 2
   ], 15000);
   assert.deepStrictEqual(awards[4], []);
-  assert.strictEqual(s.chainEarned, 320);
+  assert.strictEqual(s.chainEarned, 227); // 90 + 27 Hybrid + 110
   assert.strictEqual(s.stats.chains, 1);
   assert.strictEqual(s.stats.longest, 4);
 });
 
-test('lifecycle example: steady Beginner play earns chain A, then a separate chain B', () => {
+test('steady Beginner play with gaps under the window is one growing chain, however long it lasts', () => {
   const s = Scoring.create({ tier: 1, mode: 'classic' });
   const cs = Chains.create();
-  // Cells in different rows, columns, blocks and digits: plain Time chains.
-  const awards = play(s, cs, [
+  // Different rows, columns, blocks and digits, 4–16 s apart: 40 s in total, more than the 30 s window.
+  play(s, cs, [
     place(1, 0, 3, 0), place(2, 13, 8, 5000), place(3, 26, 1, 9000), place(4, 30, 7, 15000),
     place(5, 52, 2, 31000), place(6, 57, 4, 35000), place(7, 79, 6, 40000),
   ], 30000);
-  const a = Scoring.chainValue(200, 4, 'time', 1); // chain A: 4 placements
-  const b = Scoring.chainValue(150, 3, 'time', 1); // chain B: 3 placements
-  assert.strictEqual(awards[6][0].pts, b);
-  assert.strictEqual(s.chainEarned, a + b);
-  assert.strictEqual(cs.run, 2);
+  assert.strictEqual(cs.run, 1);
+  assert.strictEqual(s.chain?.length, 7);
+  assert.strictEqual(s.chain?.startT, 0);
+  assert.strictEqual(s.chain?.lastT, 40000);
+  assert.strictEqual(s.chainEarned, Scoring.chainValue(350, 7, 1));
   close(s, cs);
-  assert.strictEqual(s.stats.chains, 2);
+  assert.strictEqual(s.stats.chains, 1);
+  assert.strictEqual(s.stats.longest, 7);
 });
 
-test('while forming, expired placements slide out so they never block a chain', () => {
+test('while forming, a placement after the timer ran out starts over, so stale ones never block a chain', () => {
   const s = Scoring.create({ tier: 1, mode: 'classic' });
   const cs = Chains.create();
-  play(s, cs, [place(1, 0, 1, 0), place(2, 40, 2, 20000), place(3, 80, 3, 35000), place(4, 4, 4, 45000)], 30000);
-  // t=0 expired before a chain formed; 20 s, 35 s, 45 s fit in 30 s and form one.
+  // t=0 is followed by a 40 s gap (window 30 s): it drops, and 40 s, 50 s, 60 s form the chain.
+  play(s, cs, [place(1, 0, 1, 0), place(2, 40, 2, 40000), place(3, 80, 3, 50000), place(4, 4, 4, 60000)], 30000);
   assert.strictEqual(cs.run, 1);
-  assert.strictEqual(s.chainEarned, Scoring.chainValue(150, 3, 'time', 1));
+  assert.strictEqual(s.chain?.length, 3);
+  assert.strictEqual(s.chainEarned, Scoring.chainValue(150, 3, 1));
 });
 
 test('Hybrid is Time + Block + Line only', () => {
   const s = Scoring.create({ tier: 1, mode: 'classic' });
   const cs = Chains.create();
   const awards = play(s, cs, [place(1, 0, 1, 0), place(2, 1, 2, 100), place(3, 2, 3, 200)], 30000); // row 0, block 0
-  assert.match(awards[2][0].label, /^Hybrid Block Chain/);
+  assert.deepStrictEqual(awards[2].map((a) => a.label), ['Chain ×1.3!', 'Hybrid Bonus']);
   close(s, cs);
   assert.deepStrictEqual(s.stats.byType, { time: 1, number: 0, block: 1, line: 1, hybrid: 1 });
 });
@@ -148,12 +150,12 @@ test('§10.3 a mistake ends the run; the next qualifying chain is a new run', ()
   assert.strictEqual(s.stats.chains, 2);
 });
 
-test('§9 number chain: same digit 3 times beats a plain time chain', () => {
+test('§9 Number pattern: the same digit 3 times adds +10% of that placement\'s chain points', () => {
   const s = Scoring.create({ tier: 1, mode: 'classic' });
   const cs = Chains.create();
   const awards = play(s, cs, [place(1, 0, 7, 0), place(2, 40, 7, 1000), place(3, 80, 7, 2000)], 30000);
-  assert.match(awards[2][0].label, /^Number Chain/);
-  assert.strictEqual(awards[2][0].pts, Scoring.chainValue(150, 3, 'number', 1));
+  const universal = Scoring.chainValue(150, 3, 1); // 45
+  assert.deepStrictEqual(awards[2].map((a) => [a.kind, a.pts, a.pattern]), [['chain', universal, undefined], ['pattern', Math.floor(universal / 10), 'number']]);
 });
 
 test('§5.4 Zen: no chain bonus, score ×0.5', () => {

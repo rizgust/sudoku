@@ -4,7 +4,7 @@
    rewards are shown, but only one celebration dominates: one title, one coordinated sound and
    a compact summary of every amount. Amounts always come from the scoring engine's awards.
    Pure functions, no DOM. */
-import type { Award, ChainType, GameEvent, RegionKey } from '../game/events.ts';
+import type { Award, ChainType, GameEvent, PatternKind, RegionKey } from '../game/events.ts';
 import type { ChainDisplay } from '../game/scoring.ts';
 
 /** One gameplay event as the effects layer receives it. */
@@ -22,15 +22,19 @@ export const chainLevel = (length: number): ChainLevel =>
 
 export interface MomentChain {
   run: number;
+  /** The pattern that set the chain's value: drives accent and signature only. */
   type: ChainType;
   hybrid: boolean;
+  /** Universal Chain length: drives level, pitch and intensity across digit and region changes. */
   length: number;
   level: ChainLevel;
   /** First time this chain reached its level (a Mega chain's 7th placement isn't). */
   fresh: boolean;
-  /** Incremental chain points awarded by this move. */
+  /** Incremental Universal Chain points awarded by this move. */
   pts: number;
   label: string;
+  /** A pattern this move activated: celebrated even when its bonus is 0. */
+  pattern: { kind: PatternKind; pts: number; label: string } | null;
 }
 
 export interface Moment {
@@ -82,11 +86,15 @@ export function buildMoment(items: Collected[], prevLevel: (run: number) => numb
       case 'CHAIN_EXTENDED': {
         if (!chain) break;
         const pts = awards.reduce((s, a) => s + (a.kind === 'chain' ? a.pts : 0), 0);
-        const length = Math.max(...ev.patterns.map((p) => p.ids.length));
+        const pa = awards.find((a) => a.kind === 'pattern' && a.pattern);
+        const pattern = pa ? { kind: pa.pattern!, pts: pa.pts, label: pa.label } : null;
+        // Progression follows the Universal Chain ('time'), never the paying pattern's length.
+        const universal = ev.patterns.find((p) => p.type === 'time');
+        const length = universal ? universal.ids.length : Math.max(chain.length, ...ev.patterns.map((p) => p.ids.length));
         const level = chainLevel(length);
         m.chain = {
           run: ev.run, type: chain.type, hybrid: chain.hybrid, length, level,
-          fresh: level > prevLevel(ev.run), pts, label: chain.label,
+          fresh: level > prevLevel(ev.run), pts, label: chain.label, pattern,
         };
         break;
       }
@@ -130,6 +138,7 @@ export interface Plan {
 
 const CHAIN_WORD: Record<number, string> = { 2: 'GREAT', 3: 'SUPER', 4: 'MEGA', 5: 'LEGENDARY' };
 const REGION_WORD = { r: 'Row', c: 'Column', b: 'Block' } as const;
+const PATTERN_WORD: Record<PatternKind, string> = { number: 'NUMBER', row: 'LINE', col: 'LINE', block: 'BLOCK', hybrid: 'HYBRID' };
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
 
 /** Chain type identity (§D): cyan Time, blue Number, emerald Block, amber Line, gold Hybrid. */
@@ -146,6 +155,8 @@ export function plan(m: Moment, { clean = false } = {}): Plan {
   for (const r of m.regions) lines.push(`+${fmt(r.pts)} ${REGION_WORD[r.key[0] as 'r' | 'c' | 'b']}`);
   if (m.multi) lines.push(`+${fmt(m.multi.pts)} ${m.multi.count === 3 ? 'Triple' : 'Double'} Clear`);
   if (c && c.pts) lines.push(`+${fmt(c.pts)} ${c.label}`);
+  // A pattern always gets its line; at 0 points it still reads as an accomplishment.
+  if (c?.pattern) lines.push(c.pattern.pts ? `+${fmt(c.pattern.pts)} ${c.pattern.label}` : `${c.pattern.label}!`);
 
   const base = { lines, pitch: c ? c.length : 0 };
   // A clear during a long chain keeps the chain's word, even on a repeated level.
@@ -173,6 +184,11 @@ export function plan(m: Moment, { clean = false } = {}): Plan {
   }
   if (freshLevel === 3) {
     return { ...base, kind: 'super', title: 'SUPER CHAIN!', size: 'md', accent: chainAccent(c!.type, c!.hybrid), sound: 'rising', durationMs: 600 };
+  }
+  if (c?.pattern) {
+    // A pattern activating on an ordinary chain step: its own title in its own colour.
+    const sound: SoundName = c.level >= 4 ? 'rising' : 'kachink2';
+    return { ...base, kind: 'chain', title: `${PATTERN_WORD[c.pattern.kind]} BONUS!`, size: 'sm', accent: chainAccent(c.type, c.hybrid), sound, durationMs: 450 };
   }
   if (c && c.level >= 1) {
     // Fresh Chain!/Great, or a repeated Mega/Legendary step (smaller, but the pitch keeps rising).

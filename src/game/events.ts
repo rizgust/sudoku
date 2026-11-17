@@ -8,6 +8,9 @@ export type ModeId = 'classic' | 'qual' | 'daily' | 'time' | 'zen' | 'practice';
 /** Chain patterns. Row and column chains are both "Line" chains for display and stats. */
 export type ChainType = 'time' | 'number' | 'block' | 'row' | 'col';
 
+/** Bonus patterns inside the Universal Chain. Hybrid = Block + Line on the same placements. */
+export type PatternKind = Exclude<ChainType, 'time'> | 'hybrid';
+
 /** r0–r8 rows, c0–c8 columns, b0–b8 blocks. */
 export type RegionKey = `${'r' | 'c' | 'b'}${number}`;
 
@@ -32,9 +35,10 @@ export type GameEvent =
   | { type: 'CELL_REVEALED'; cell: number }
   /** Regions completed by one board change. */
   | { type: 'REGION_COMPLETED'; regions: RegionKey[] }
-  /** From the chain detector: the patterns the newest placement completes. */
-  | { type: 'CHAIN_EXTENDED'; placementId?: number; run: number; patterns: ChainPattern[] }
-  /** The chain's window passed or play interrupted it. */
+  /** From the chain detector: the Universal Chain ('time') and the bonus patterns the newest
+      placement completes. `t` is that placement's game-clock ms (absent in older logs). */
+  | { type: 'CHAIN_EXTENDED'; placementId?: number; run: number; patterns: ChainPattern[]; t?: number }
+  /** The chain's inactivity timer ran out or play interrupted it. */
   | { type: 'CHAIN_CLOSED'; run: number; reason: ChainCloseReason }
   /** Older saved games used this before chains had ids. */
   | { type: 'CHAIN_BROKEN' }
@@ -63,10 +67,14 @@ export type ProgressEvent =
 
 /** Points the scoring engine awarded for one event, for pop-ups and effects. */
 export interface Award {
-  kind: 'place' | 'region' | 'multi' | 'chain';
+  /** 'chain' is the Universal Chain's incremental payout; 'pattern' a pattern's one-time bonus
+      (sent even when it is worth 0, so the activation is still celebrated). */
+  kind: 'place' | 'region' | 'multi' | 'chain' | 'pattern';
   pts: number;
   /** Empty for plain placements. */
   label: string;
   /** For region awards: which region. */
   region?: RegionKey;
+  /** For pattern awards: which pattern activated. */
+  pattern?: PatternKind;
 }

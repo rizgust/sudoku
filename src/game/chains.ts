@@ -1,19 +1,25 @@
 /* Chain detection. Part of the game engine, not the scoring engine: it watches validated,
-   eligible placements and reports which chain patterns the newest placement completes.
-   It knows nothing about points. Scoring consumes its reports as events.
+   eligible placements and reports the chain the newest placement extends. It knows nothing
+   about points. Scoring consumes its reports as events.
 
-   Lifecycle (two phases):
-   - Forming: placements slide through the time window. Expired placements drop off the front,
-     so an old placement can't block a new chain. Once `min` placements fit inside the window,
-     the chain opens with a new id.
-   - Open: the window is anchored at the chain's first placement and doesn't slide. Placements
-     inside it extend the chain. The first placement (or clock tick) past the window closes it,
-     and that placement starts forming the next chain. A closed chain's placements never count
-     toward a later chain, so steady play earns a series of separate chains.
+   Universal Chain: one chain counts consecutive eligible correct placements, whatever their
+   digit, row, column or block. Switching digits or moving elsewhere on the board never ends
+   it. An inactivity timer keeps it alive: each placement refreshes the timer to the
+   difficulty's window, measured from that placement. The chain ends only when:
+   - the timer runs out (no placement within the window of the previous one),
+   - play interrupts it (mistake, hint, clearing a credited cell, an undo that changes the
+     board, end of attempt): see reset().
 
-   For an open chain, each pattern's sequence is the longest suffix of the chain's placements
-   that shares the newest placement's digit, block, row or column. The Time pattern is the whole
-   chain. Any sequence with at least `min` placements qualifies.
+   Lifecycle: placements collect while the chain forms; once `min` of them are in, the chain
+   opens with a new id and every later placement extends that same chain until it ends. An
+   ended chain's placements never count toward a later chain.
+
+   Bonus patterns: within the open chain, each pattern's sequence is the longest suffix of the
+   chain's placements that shares the newest placement's digit (Number), block (Block), row or
+   column (Line). Any sequence with at least `min` placements qualifies. A pattern ending, for
+   example placing a different digit after three 7s, only drops that pattern; the Universal
+   Chain carries on. The 'time' pattern is the Universal Chain itself and is always reported
+   first.
 
    State is plain JSON so it can be saved with the game. */
 import type { ChainPattern, ChainType } from './events.ts';
@@ -32,14 +38,16 @@ export interface Placement {
 export interface ChainState {
   /** Id of the latest chain. */
   run: number;
+  /** The chain has reached `min` placements and is open. */
   active: boolean;
+  /** The current chain's placements, oldest first (forming or open). */
   recent: Placement[];
 }
 
 export interface ChainOptions { windowMs: number; min: number }
 export interface Closed { run: number }
 
-// Pattern types and the placement attribute each one requires to be shared.
+// Bonus pattern types and the placement attribute each one requires to be shared.
 const PATTERNS: [ChainType, 'digit' | 'block' | 'row' | 'col'][] = [
   ['number', 'digit'],
   ['block', 'block'],
@@ -60,20 +68,26 @@ export function reset(cs: ChainState): Closed | null {
   return closed;
 }
 
+/** Game-clock ms at which the chain ends unless another placement lands, or null if empty. */
+export function deadline(cs: ChainState, { windowMs }: Pick<ChainOptions, 'windowMs'>): number | null {
+  const last = cs.recent[cs.recent.length - 1];
+  return last ? last.t + windowMs : null;
+}
+
 /**
- * Advances the clock to t. Closes an open chain whose window has passed and returns it;
- * while forming, drops placements that fell out of the window.
+ * Advances the clock to t. Once the inactivity timer has run out (more than the window since
+ * the latest placement), the chain ends: an open chain is returned, a forming one is dropped.
  */
-export function expire(cs: ChainState, t: number, { windowMs }: Pick<ChainOptions, 'windowMs'>): Closed | null {
-  if (!cs.recent.length || t - cs.recent[0].t <= windowMs) return null;
-  if (cs.active) return reset(cs);
-  cs.recent = cs.recent.filter((x) => t - x.t <= windowMs);
-  return null;
+export function expire(cs: ChainState, t: number, opts: Pick<ChainOptions, 'windowMs'>): Closed | null {
+  const end = deadline(cs, opts);
+  if (end == null || t <= end) return null;
+  return reset(cs);
 }
 
 /**
  * Observes one eligible placement. `closed` is a chain this placement's arrival ended (its
- * window had passed); `chain` lists the patterns the placement completes, 'time' first.
+ * inactivity timer had run out); `chain` lists the patterns the placement completes, the
+ * Universal Chain ('time') first.
  */
 export function observe(cs: ChainState, p: Placement, opts: ChainOptions): {
   closed: Closed | null;

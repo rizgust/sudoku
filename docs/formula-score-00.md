@@ -553,15 +553,13 @@ Row 5:
 
 ### E. Hybrid Chain
 
-A Hybrid Chain occurs when a sequence satisfies Time Chain plus at least two distinct additional chain categories.
+A Hybrid Chain occurs when a Block pattern and a Line pattern overlap on the same recent placements, for example three cells of one row inside one block.
 
-Examples:
+In valid Sudoku a Number pattern can't share three cells with a Block or Line pattern (a digit appears once per unit), so Block + Line is the only overlap that can happen.
 
-- Time + Number + Line.
-- Time + Number + Block.
-- Time + Line + Block.
+Hybrid is a reward category derived from overlapping patterns, rather than a separate input sequence.
 
-Hybrid is a reward category derived from overlapping chains, rather than a separate input sequence.
+In v5 and later the Time Chain is the Universal Chain (§10.1), and Number, Block, Line and Hybrid are bonus patterns detected inside it.
 
 ---
 
@@ -580,47 +578,43 @@ Every difficulty has a specific chain window.
 
 Scoring rules v2 doubled these windows (v1: 30 / 25 / 20 / 15 / 12 / 10 seconds).
 
-## 10.1 Window Calculation
+## 10.1 Universal Chain and Inactivity Timer
 
-The window begins at the first placement in the qualifying sequence.
+Scoring rules v5 replaced the fixed total window with an inactivity timer. The windows above are unchanged; they now measure the time allowed between consecutive placements.
 
-```text
-ChainDuration =
-    LastPlacementTime
-  - FirstPlacementTime
-```
+There is one Universal Chain. It counts consecutive eligible correct placements regardless of digit, row, column or block. Switching digits or moving to another region never ends it.
 
-The sequence qualifies when:
+Each eligible placement refreshes the timer:
 
 ```text
-ChainDuration <= DifficultyWindow
+ChainDeadline =
+    LatestPlacementTime
+  + DifficultyWindow
 ```
 
-The timer does not reset for each placement.
+The chain ends when the game clock passes the deadline with no new eligible placement, or when play interrupts it (§10.3).
 
 Example:
 
 ```text
-Hard difficulty: 15 seconds
+Hard difficulty: 30 seconds
 
-00:00  Place 3
-00:04  Place 8
-00:09  Place 1
-00:13  Place 7
-
-Result:
-4-placement chain within 13 seconds.
+00:00  Place 7
+00:06  Place 7
+00:12  Place 7     chain opens (3)
+00:18  Place 7     4
+00:24  Place 7     5
+00:31  Place 4     6, the Number pattern ends but the chain continues
+01:05  Place 2     34 s since the last placement: the chain ended at 01:01, this starts a new one
 ```
 
-## 10.2 Sliding Chain Evaluation
+## 10.2 Forming, Patterns and Pattern Endings
 
-To prevent an expired starting placement from blocking future chains, the engine evaluates recent consecutive eligible placements using a sliding time window.
+Placements collect while the chain forms. Once three are in, the chain opens and receives an id. Every later placement extends that same chain until it ends. If the timer runs out while forming, the collected placements are dropped, so a stale placement never blocks a new chain. An ended chain's placements never count toward a later chain.
 
-When older placements expire, newer placements may form a different chain.
+Number, Block and Line (§9.1 B–D) are bonus patterns detected inside the Universal Chain: each is the longest run of the chain's most recent placements that share the newest placement's digit, block, row or column. The Time Chain (§9.1 A) is the Universal Chain itself.
 
-A chain extension is evaluated against the earliest placement in its currently qualifying sequence.
-
-A sequence must contain at least three placements to qualify.
+A pattern ending, for example placing a 4 after three 7s, only drops that pattern. It never ends the Universal Chain. A later run of the same kind in the same chain is a new pattern instance.
 
 ## 10.3 Chain Interruption
 
@@ -629,6 +623,7 @@ A chain is interrupted when:
 - An incorrect number is submitted.
 - A hint reveals or supplies a placement.
 - A player manually clears a credited placement.
+- The inactivity timer runs out (§10.1).
 - An undo or redo operation changes the confirmed board.
 - The active attempt ends.
 
@@ -652,19 +647,25 @@ Pausing gameplay freezes the active game clock and chain timer; a pause cannot b
 
 Maximum length multiplier: ×2.0.
 
-## 11.2 Chain Type Factor
+## 11.2 Pattern Bonuses
 
-| Type | Factor |
+Scoring rules v6 made the Universal Chain and pattern bonuses independent. The Universal Chain alone sets the chain value (§11.4). Patterns no longer compete with it through type factors; each pays a one-time bonus on top.
+
+| Pattern | Bonus |
 |---|---:|
-| Time | ×1.00 |
-| Number | ×1.10 |
-| Line | ×1.15 |
-| Block | ×1.20 |
-| Hybrid | +20% of calculated chain bonus |
+| Number | +10% |
+| Line | +15% |
+| Block | +20% |
+| Hybrid | +30% |
 
-When multiple patterns qualify, the engine selects the single strongest non-Hybrid chain type.
+Rules:
 
-Factors do not stack multiplicatively.
+- A pattern activates when it first reaches three consecutive eligible placements inside the Universal Chain.
+- The bonus is a percentage of the Universal Chain points earned by the placement that activates the pattern.
+- Each pattern instance pays once, on activation. Extending it pays nothing more.
+- When several patterns activate on one placement, only the strongest bonus is paid. All of them still count as completed patterns for statistics and achievements.
+- A pattern ending never ends the Universal Chain. A later run of the same kind is a new instance and can pay again.
+- An activation is always announced and celebrated, even when its bonus is 0.
 
 ## 11.3 Difficulty Chain Bonus Multiplier
 
@@ -684,61 +685,49 @@ It does not multiply the underlying placement points or completion bonuses.
 ## 11.4 Chain Bonus Formula
 
 ```text
-EligiblePlacementPoints =
+UniversalPlacementPoints =
     Sum of placement points
-    in the qualifying sequence
+    in the Universal Chain
 
-ChainBonus =
-    EligiblePlacementPoints
-    × (LengthMultiplier × TypeFactor - 1)
-    × DifficultyChainMultiplier
+UniversalChainValue =
+    UniversalPlacementPoints
+  × (LengthMultiplier - 1)
+  × DifficultyChainMultiplier
 ```
 
-For Hybrid Chains:
-
-```text
-HybridBonus =
-    ChainBonus × 0.20
-```
-
-The additional Hybrid bonus is included in the chain bonus total.
+Each placement earns the incremental increase in the Universal Chain value (§12.1).
 
 ## 11.5 Example
 
-Hard difficulty:
-
-- Four placements.
-- All within the same block.
-- Completed within 13 seconds.
-- Each placement worth 100 points.
+Hard difficulty, placements worth 100 points each:
 
 ```text
-EligiblePlacementPoints = 400
-
-LengthMultiplier = 1.5
-BlockFactor = 1.2
-DifficultyMultiplier = 2.0
-
-ChainBonus =
-    400 × (1.5 × 1.2 - 1) × 2.0
-
-ChainBonus = 640
+Placement 1–2:  chain forming, nothing paid
+Placement 3:    UniversalChainValue = 300 × (1.3 - 1) × 2.0 = 180
+                pays 180
+Placement 4:    UniversalChainValue = 400 × (1.5 - 1) × 2.0 = 400
+                pays 400 - 180 = 220
 ```
 
-The four placements already earned 400 base points.
-
-The chain adds 640 bonus points.
-
-Total contribution:
+If placements 2, 3 and 4 share a block, the Block pattern activates on placement 4:
 
 ```text
-Placement points = 400
-Chain bonus      = 640
-----------------------
-Total            = 1040
+Block bonus = floor(220 × 20 / 100) = 44
 ```
+
+Placement 4 earns 220 + 44 chain points. A fifth placement in the same block extends the Block pattern but only earns its Universal Chain increment.
 
 Region completion rewards are calculated separately.
+
+## 11.6 Pattern Bonus Formula
+
+```text
+PatternBonus =
+    floor(UniversalPointsEarnedByActivatingPlacement
+          × PatternPercent / 100)
+```
+
+Universal Chain points and pattern bonuses together form the chain bonus total, which the cap in §12.3 limits.
 
 ---
 
@@ -765,15 +754,17 @@ This prevents rewarding the entire chain repeatedly.
 
 ## 12.2 Overlapping Chains
 
+The chain id is the Universal Chain's id, so a chain's payouts stay incremental across digit and region changes and across pattern endings.
+
 A placement may qualify for multiple chain patterns.
 
 The system:
 
-1. Evaluates eligible active patterns.
-2. Selects the pattern producing the highest valid chain reward.
-3. Applies a Hybrid bonus if the sequence qualifies.
-4. Awards only the incremental increase in reward.
-5. Records the chain type and sequence.
+1. Awards the incremental increase in the Universal Chain value.
+2. Detects which pattern instances the placement activates for the first time.
+3. Pays the strongest activating pattern's bonus (§11.2).
+4. Marks every activating instance as paid, so none of them can pay later in the chain.
+5. Records the chain and every pattern instance for statistics.
 
 A single qualifying placement sequence cannot be replayed as multiple independent chain payouts.
 
@@ -995,21 +986,22 @@ Score animations must not block input.
 
 ## 16.3 Chain Visual Feedback
 
-When a chain becomes active, display:
+When a chain becomes active, the indicator puts the Universal Chain first:
 
-- Chain type.
-- Current chain length.
-- Time remaining.
-- Potential incremental bonus.
+- Universal Chain length.
+- Time remaining before the inactivity timer ends it (the ring refills on every placement).
 - Chain multiplier.
+- Potential incremental bonus.
+
+A secondary notice shows the active bonus pattern (Number, Block, Line, with Hybrid when it applies). It animates in when a new pattern appears and disappears when the pattern ends, without affecting the chain.
 
 Example:
 
 ```text
-BLOCK CHAIN ×1.5
-4 PLACEMENTS
-6.2s REMAINING
+7× CHAIN ×2.0 · 6.2s · NEXT +100    BLOCK 3
 ```
+
+Chain sounds and celebration levels follow the Universal Chain length, so they keep rising when the player switches digits or regions.
 
 Effects should remain subtle enough not to obstruct the Sudoku board.
 
@@ -1305,6 +1297,8 @@ Track:
 - Highest single-chain bonus.
 - Total chain bonus points.
 - Chain counts by difficulty.
+
+Since v5, Time Chains and "chains" count Universal Chains. Number, Block, Line and Hybrid count each distinct pattern instance, so one long Universal Chain can contain several. Longest chain is the Universal Chain length.
 
 ## 20.4 Region Statistics
 
@@ -1687,8 +1681,7 @@ scoring
   - region bonuses
   - multi-clear bonuses
   - chain length multipliers
-  - chain type factors
-  - hybrid bonus
+  - pattern bonuses (Number, Line, Block, Hybrid)
   - chain cap
   - mistake penalty
   - hint penalty

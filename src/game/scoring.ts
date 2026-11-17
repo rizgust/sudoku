@@ -4,17 +4,22 @@
    apply(state, event) updates the state and returns the awards to show. The state is plain
    JSON, so it is saved with the game, and replay(events) rebuilds it from the event log.
    All arithmetic is integer: multipliers are stored as hundredths or tenths. */
-import type { Award, ChainPattern, ChainType, GameEvent, ModeId, PlacementTechnique } from './events.ts';
+import type { Award, ChainPattern, ChainType, GameEvent, ModeId, PatternKind, PlacementTechnique } from './events.ts';
 
 // Every tunable number lives here (§29). Bump `version` whenever a value changes;
 // each finished attempt stores the version it was scored with.
 export const RULES = {
   // 2: chain windows doubled; 3: guide lines count as an assist (×0.5);
-  // 4: guide lines also halve the speed rewards (time bonus, chains).
-  version: 4,
+  // 4: guide lines also halve the speed rewards (time bonus, chains);
+  // 5: Universal Chains: one chain across digits and regions, kept alive by an inactivity
+  //    timer (same windows, now measured from the latest placement); patterns are bonuses;
+  // 6: the Universal Chain alone sets the chain value (no type factor); Number, Line, Block
+  //    and Hybrid pay a one-time bonus on activation instead of competing with it.
+  version: 6,
   // Indexed by tier id (1 Beginner … 6 Master).
   completion: [0, 1000, 2500, 5000, 10000, 20000, 40000],
   par: [0, 300, 480, 720, 1080, 1500, 2100],
+  // Inactivity timer: a chain ends when no eligible placement lands within this long.
   chainWindowMs: [0, 60000, 50000, 40000, 30000, 24000, 20000],
   chainMin: 3,
   chainDifficulty10: [0, 10, 12, 15, 20, 25, 30], // ×1.0 … ×3.0, in tenths
@@ -31,14 +36,13 @@ export const RULES = {
   multiClear: [0, 0, 200, 400], // by number of regions completed at once
 
   chainLength100: [100, 100, 100, 130, 150, 180, 200], // by placements; 6+ uses the last
-  chainType100: { time: 100, number: 110, row: 115, col: 115, block: 120 } satisfies Record<ChainType, number>,
-  // Tie-break when two patterns pay the same: strongest factor first, so results are stable.
-  chainPriority: ['block', 'row', 'col', 'number', 'time'] as ChainType[],
-  // Hybrid = Time + Block + Line (§9.E). In valid Sudoku a Number chain can't share three
-  // cells with a Block or Line chain (a digit appears once per unit), so those combinations
-  // can never happen; v1 defines Hybrid as the one combination that can.
-  hybridPct: 20,
-  chainCapPct: 35, // chain bonus ≤ 35% of the raw score
+  // Pattern bonuses: paid once, when a pattern first reaches chainMin placements, as a share
+  // of the Universal Chain points that same placement earned. When several patterns activate
+  // on one placement only the strongest pays. Hybrid = Block + Line (§9.E): in valid Sudoku a
+  // Number pattern can't share three cells with a Block or Line one (a digit appears once per
+  // unit), so Hybrid is the one overlap that can happen.
+  patternPct: { number: 10, row: 15, col: 15, block: 20, hybrid: 30 } satisfies Record<PatternKind, number>,
+  chainCapPct: 35, // all chain points (Universal Chain + pattern bonuses) ≤ 35% of the raw score
 
   mistakeStep10: 1, // −10% per mistake
   hintStep10: 2,    // −20% per hint
@@ -60,15 +64,29 @@ export const RULES = {
 /** Stat keys for chain types; row and column both count as Line. */
 export type ChainStatKey = 'time' | 'number' | 'block' | 'line' | 'hybrid';
 
+/** A bonus pattern active on the latest placement, inside the Universal Chain. */
+export interface ChainBonusPattern { type: Exclude<ChainType, 'time'>; length: number }
+
 export interface ChainDisplay {
   run: number;
-  type: ChainType;
-  hybrid: boolean;
+  /** Universal Chain length: consecutive eligible placements in this chain. */
   length: number;
-  points: number;
-  mul100: number;
-  /** Game-clock ms when the chain's window started. */
+  /** Placement points in the Universal Chain. */
+  allPoints: number;
+  /** Game-clock ms of the chain's first placement. */
   startT: number;
+  /** Game-clock ms of the latest placement; the inactivity timer runs from here. */
+  lastT: number;
+  /** Universal Chain length multiplier. */
+  mul100: number;
+  /** Pattern identity for accents: the one just activated, else the strongest active, else 'time'. */
+  type: ChainType;
+  /** Block and Line are both active on the latest placement. */
+  hybrid: boolean;
+  /** Bonus patterns active on the latest placement, best first (secondary notices). */
+  bonus: ChainBonusPattern[];
+  /** The pattern the latest placement activated (its bonus was awarded), if any. */
+  activated: PatternKind | null;
   label: string;
 }
 
@@ -108,17 +126,30 @@ export interface ScoreState {
   mistakes: number; hints: number; assisted: boolean;
   /** Guide lines were shown at some point in the attempt. */
   guided: boolean;
-  /** Chain id → highest value already awarded. */
+  /** Chain id → highest Universal Chain value already awarded. */
   runs: Record<number, number>;
   /** The chain currently on display. */
   chain: ChainDisplay | null;
-  /** The open chain's running totals, finalized on close. */
-  open: { run: number; types: Partial<Record<ChainStatKey, 1>>; hybrid: boolean; longest: number } | null;
+  /** The open chain's running totals, finalized on close. `seen` holds one key per pattern
+      instance ("block:12" = the Block pattern starting at placement 12); a key is added when
+      the pattern is first seen, so each instance pays its bonus at most once. */
+  open: OpenChain | null;
   stats: AttemptStats;
   final: FinalScore | null;
 }
 
-const TYPE_NAMES: Record<ChainType, string> = { time: 'Time', number: 'Number', row: 'Line', col: 'Line', block: 'Block' };
+interface OpenChain {
+  run: number;
+  seen: Record<string, 1>;
+  longest: number;
+  /** Pattern bonuses paid in this chain (for the best-chain stat). */
+  bonus?: number;
+  /** Games saved before v5 tracked types per chain instead of per pattern instance. */
+  types?: Partial<Record<ChainStatKey, 1>>;
+  hybrid?: boolean;
+}
+
+const PATTERN_NAMES: Record<PatternKind, string> = { number: 'Number', row: 'Line', col: 'Line', block: 'Block', hybrid: 'Hybrid' };
 const REGION_NAMES = { r: 'Row', c: 'Column', b: 'Block' } as const;
 const REGION_STATS = { r: 'rows', c: 'cols', b: 'blocks' } as const;
 const MULTI_NAMES: Record<number, string> = { 2: 'Double Clear', 3: 'Triple Clear' };
@@ -152,39 +183,46 @@ export function create({ tier, mode: m }: { tier: number; mode: ModeId }): Score
   };
 }
 
-/** ChainBonus = points × (Length × Type − 1) × Difficulty, floored (§11.4). */
-export function chainValue(points: number, length: number, type: ChainType, tier: number): number {
-  const lt = lengthMul100(length) * RULES.chainType100[type] - 10000;
-  if (lt <= 0) return 0;
-  return Math.floor((points * lt * RULES.chainDifficulty10[tier]) / 100000);
+/** Universal Chain value = points × (Length − 1) × Difficulty, floored (§11.4). */
+export function chainValue(points: number, length: number, tier: number): number {
+  const l = lengthMul100(length) - 100;
+  if (l <= 0) return 0;
+  return Math.floor((points * l * RULES.chainDifficulty10[tier]) / 1000);
 }
 
-interface ScoredChain {
-  type: ChainType; length: number; firstT: number; points: number; value: number;
-  hybrid: boolean; hybridValue: number; total: number; mul100: number;
-}
+/** Pattern bonus = floor(Universal Chain points of the activating placement × pct / 100) (§11.6). */
+export const patternBonus = (universalPts: number, kind: PatternKind) =>
+  Math.floor((universalPts * RULES.patternPct[kind]) / 100);
 
-const has = (patterns: ChainPattern[], ...types: ChainType[]) => patterns.some((p) => types.includes(p.type));
-const isHybrid = (patterns: ChainPattern[]) => has(patterns, 'time') && has(patterns, 'block') && has(patterns, 'row', 'col');
 const statKey = (t: ChainType): ChainStatKey => (t === 'row' || t === 'col' ? 'line' : t);
 
-/** Scores every qualifying pattern and returns the best one, with the Hybrid bonus. */
-function bestChain(s: ScoreState, patterns: ChainPattern[]): ScoredChain {
-  let best: Pick<ScoredChain, 'type' | 'length' | 'firstT' | 'points' | 'value'> | null = null;
+/**
+ * Patterns this placement activates, strongest first. A pattern activates when its instance
+ * is first seen at exactly chainMin placements; Hybrid when Block and Line overlap in a
+ * combination not seen before. Every instance is marked as seen, so none can pay twice.
+ */
+function activate(o: OpenChain, patterns: ChainPattern[]): PatternKind[] {
+  o.seen ??= {};
+  const fresh: PatternKind[] = [];
   for (const p of patterns) {
-    const points = p.ids.reduce((sum, id) => sum + (s.pts[id] || 0), 0);
-    const value = chainValue(points, p.ids.length, p.type, s.tier);
-    const better = !best || value > best.value ||
-      (value === best.value && RULES.chainPriority.indexOf(p.type) < RULES.chainPriority.indexOf(best.type));
-    if (better) best = { type: p.type, length: p.ids.length, firstT: p.firstT, points, value };
+    const key = `${statKey(p.type)}:${p.ids[0]}`;
+    if (o.seen[key]) continue;
+    o.seen[key] = 1;
+    if (p.type !== 'time' && p.ids.length === RULES.chainMin) fresh.push(p.type);
   }
-  const b = best!;
-  const hybrid = isHybrid(patterns);
-  const hybridValue = hybrid ? Math.floor((b.value * RULES.hybridPct) / 100) : 0;
-  return { ...b, hybrid, hybridValue, total: b.value + hybridValue, mul100: lengthMul100(b.length) };
+  const block = patterns.find((p) => p.type === 'block');
+  const line = patterns.find((p) => p.type === 'row' || p.type === 'col');
+  if (block && line) {
+    const key = `hybrid:${block.ids[0]}:${line.ids[0]}`;
+    if (!o.seen[key]) { o.seen[key] = 1; fresh.push('hybrid'); }
+  }
+  return fresh.sort((x, y) => RULES.patternPct[y] - RULES.patternPct[x]);
 }
 
-/** Records a finished chain in the attempt stats, once per chain (achievements read these). */
+/**
+ * Records a finished chain in the attempt stats (achievements read these): one chain and one
+ * Time chain per Universal Chain, plus every distinct bonus pattern it contained.
+ */
 function closeChain(s: ScoreState): void {
   const o = s.open;
   s.open = null;
@@ -192,14 +230,14 @@ function closeChain(s: ScoreState): void {
   if (!o) return;
   const st = s.stats;
   st.chains++;
-  for (const t of Object.keys(o.types) as ChainStatKey[]) st.byType[t]++;
+  for (const key of Object.keys(o.seen || {})) st.byType[key.split(':')[0] as ChainStatKey]++;
+  for (const t of Object.keys(o.types || {}) as ChainStatKey[]) st.byType[t]++;
   if (o.hybrid) st.byType.hybrid++;
   st.longest = Math.max(st.longest, o.longest);
-  st.bestChain = Math.max(st.bestChain, s.runs[o.run] || 0);
+  st.bestChain = Math.max(st.bestChain, (s.runs[o.run] || 0) + (o.bonus || 0));
 }
 
-const chainLabel = (c: { hybrid: boolean; type: ChainType; mul100: number }) =>
-  `${c.hybrid ? 'Hybrid ' : ''}${TYPE_NAMES[c.type]} Chain ×${(c.mul100 / 100).toFixed(1)}`;
+const chainLabel = (mul100: number) => `Chain ×${(mul100 / 100).toFixed(1)}`;
 
 export function apply(s: ScoreState, ev: GameEvent): Award[] {
   if (s.final && ev.type !== 'PUZZLE_COMPLETED') return [];
@@ -239,23 +277,44 @@ export function apply(s: ScoreState, ev: GameEvent): Award[] {
     case 'CHAIN_EXTENDED': {
       if (!chainsEnabled(s.mode) || !ev.patterns.length) break;
       if (s.open && s.open.run !== ev.run) closeChain(s);
-      if (!s.open) s.open = { run: ev.run, types: {}, hybrid: false, longest: 0 };
-      const c = bestChain(s, ev.patterns);
-      // Incremental accounting: pay only what exceeds this chain's best value so far (§12.1).
-      const prev = s.runs[ev.run] || 0;
-      const inc = Math.max(0, c.total - prev);
-      s.runs[ev.run] = Math.max(prev, c.total);
-      s.chainEarned += inc;
+      if (!s.open) s.open = { run: ev.run, seen: {}, longest: 0, bonus: 0 };
       const o = s.open;
-      for (const p of ev.patterns) o.types[statKey(p.type)] = 1;
-      o.hybrid = o.hybrid || c.hybrid;
-      const time = ev.patterns.find((p) => p.type === 'time');
-      o.longest = Math.max(o.longest, time ? time.ids.length : c.length);
+      // The Universal Chain is the 'time' pattern; events always carry it.
+      const all = ev.patterns.find((p) => p.type === 'time') ?? ev.patterns.reduce((x, y) => (y.ids.length > x.ids.length ? y : x));
+      const allPoints = all.ids.reduce((sum, id) => sum + (s.pts[id] || 0), 0);
+      const length = all.ids.length;
+      const mul100 = lengthMul100(length);
+
+      // Universal Chain: incremental accounting, pay only what exceeds the chain's best value (§12.1).
+      const value = chainValue(allPoints, length, s.tier);
+      const prev = s.runs[ev.run] || 0;
+      const inc = Math.max(0, value - prev);
+      s.runs[ev.run] = Math.max(prev, value);
+      s.chainEarned += inc;
+      if (inc) awards.push({ kind: 'chain', pts: inc, label: `${chainLabel(mul100)}!` });
+
+      // Pattern bonus: once per pattern instance, strongest only, a share of `inc` (§11.6).
+      // Sent even at 0 points so the activation is still celebrated.
+      const activated = activate(o, ev.patterns)[0] ?? null;
+      if (activated) {
+        const bonus = patternBonus(inc, activated);
+        s.chainEarned += bonus;
+        o.bonus = (o.bonus || 0) + bonus;
+        awards.push({ kind: 'pattern', pts: bonus, label: `${PATTERN_NAMES[activated]} Bonus`, pattern: activated });
+      }
+
+      o.longest = Math.max(o.longest, length);
+      const pct = (t: ChainBonusPattern['type']) => RULES.patternPct[t];
+      const bonus = ev.patterns
+        .filter((p): p is ChainPattern & { type: ChainBonusPattern['type'] } => p.type !== 'time')
+        .map((p) => ({ type: p.type, length: p.ids.length }))
+        .sort((x, y) => y.length - x.length || pct(y.type) - pct(x.type));
+      const hybrid = bonus.some((b) => b.type === 'block') && bonus.some((b) => b.type === 'row' || b.type === 'col');
+      const type: ChainType = activated && activated !== 'hybrid' ? activated : hybrid ? 'block' : bonus[0]?.type ?? 'time';
       s.chain = {
-        run: ev.run, type: c.type, hybrid: c.hybrid, length: c.length, points: c.points, mul100: c.mul100,
-        startT: time ? time.firstT : c.firstT, label: chainLabel(c),
+        run: ev.run, length, allPoints, startT: all.firstT, lastT: ev.t ?? all.firstT, mul100,
+        type, hybrid, bonus, activated, label: chainLabel(mul100),
       };
-      if (inc) awards.push({ kind: 'chain', pts: inc, label: `${chainLabel(c)}!` });
       break;
     }
     case 'CHAIN_CLOSED':
@@ -333,14 +392,13 @@ export function live(s: ScoreState): number {
 }
 
 /**
- * Roughly what the next placement would add if it extends the chain on display with the
- * same pattern and default points. Chain indicator only.
+ * Roughly what the next placement would add to the Universal Chain at default points,
+ * before any pattern bonus. Chain indicator only.
  */
 export function nextChainGain(s: ScoreState, extraPts = RULES.placementDefault): number {
   const c = s.chain;
   if (!c || !chainsEnabled(s.mode)) return 0;
-  let v = chainValue(c.points + extraPts, c.length + 1, c.type, s.tier);
-  if (c.hybrid) v += Math.floor((v * RULES.hybridPct) / 100);
+  const v = chainValue(c.allPoints + extraPts, c.length + 1, s.tier);
   return Math.max(0, v - (s.runs[c.run] || 0));
 }
 
